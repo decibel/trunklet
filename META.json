@@ -1,0 +1,31 @@
+{
+    "name": "trunklet",
+    "abstract": "A templating system for Postgres. Elephants don't use templates, they use trunklets!",
+    "description": "A long description",
+    "version": "0.0.1",
+    "maintainer": "Jim Nasby <Jim.Nasby@BlueTreble.com>",
+    "license": {
+        "BSD 2 Clause": "http://opensource.org/licenses/bsd-license.php"
+    },
+    "provides": {
+        "trunklet": {
+            "abstract": "A templating system for Postgres. Elephants don't use templates, they use trunklets!",
+            "file": "sql/trunklet.sql",
+            "docfile": "doc/trunklet.md",
+            "version": "0.0.1"
+        }
+    },
+    "release_status": "unstable",
+
+    "generated_by": "Jim C. Nasby",
+
+
+    "tags": [ "template", "templates", "templating" ],
+
+    "meta-spec": {
+        "version": "1.0.0",
+        "url": "http://pgxn.org/meta/spec.txt"
+    },
+
+    "X_vi": "vi: expandtab ts=4 sw=4"
+}
