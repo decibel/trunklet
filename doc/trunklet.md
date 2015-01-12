@@ -11,10 +11,12 @@ Description
 
 A long description
 
-Usage
------
+API
+---
 
-  Show usage.
+template__store
+template_language__add
+template_language__remove (TODO)
 
 Support
 -------
