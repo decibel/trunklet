@@ -1,7 +1,7 @@
 {
     "name": "trunklet",
-    "abstract": "A templating system for Postgres. Elephants don't use templates, they use trunklets!",
-    "description": "A long description",
+    "abstract": "A templating system for Postgres.",
+    "description": "Elephants don't use templates, they use trunklets!",
     "version": "0.0.1",
     "maintainer": "Jim Nasby <Jim.Nasby@BlueTreble.com>",
     "license": {
@@ -15,12 +15,25 @@
             "version": "0.0.1"
         }
     },
+    "prereqs": {
+        "build": {
+            "requires": {
+                "variant": 0
+            }
+        },
+        "test": {
+            "requires": {
+                "pgTAP": 0
+            }
+        }
+    },
+
     "release_status": "unstable",
 
     "generated_by": "Jim C. Nasby",
 
 
-    "tags": [ "template", "templates", "templating" ],
+    "tags": [ "template", "templates", "templating", "meta", "meta programming" ],
 
     "meta-spec": {
         "version": "1.0.0",
