@@ -4,28 +4,32 @@
  *
  */
 
---
--- This is a example code genereted automaticaly
--- by pgxn-utils.
-
 SET client_min_messages = warning;
 
--- If your extension will create a type you can
--- do somenthing like this
-CREATE TYPE trunklet AS ( a text, b text );
+CREATE SCHEMA _trunklet;
+CREATE SCHEMA trunklet;
+GRANT USAGE ON SCHEMA trunklet TO public;
 
--- Maybe you want to create some function, so you can use
--- this as an example
-CREATE OR REPLACE FUNCTION trunklet (text, text)
-RETURNS trunklet LANGUAGE SQL AS 'SELECT ROW($1, $2)::trunklet';
+CREATE OR REPLACE FUNCTION _trunklet.language_sanity(
+  language text
+) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+  error CONSTANT text := CASE
+    WHEN language IS NULL THEN 'be NULL'
+    WHEN language = '' THEN 'be blank'
+    -- (?n) means use newline sensitive mode
+    WHEN language ~ '(?n)^\s' THEN 'begin with whitespace'
+    WHEN language ~ '(?n)\s$' THEN 'end with whitespace'
+  END;
+BEGIN
+  IF error IS NULL THEN
+    RETURN;
+  END IF;
 
--- Sometimes it is common to use special operators to
--- work with your new created type, you can create
--- one like the command bellow if it is applicable
--- to your case
+  RAISE EXCEPTION 'language must not %', error
+    USING ERRCODE = 'invalid_parameter_value'
+  ;
+END
+$body$;
 
-CREATE OPERATOR #? (
-	LEFTARG   = text,
-	RIGHTARG  = text,
-	PROCEDURE = trunklet
-);
+-- vi: expandtab sw=2 ts=2
