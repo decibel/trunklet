@@ -77,6 +77,63 @@ END
 $body$;
 
 /*
+ * VIEW template_language
+ */
+CREATE OR REPLACE FUNCTION test_template_language
+--\i test/helpers/f1.sql
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_schema CONSTANT name := 'trunklet';
+  c_name CONSTANT name := 'template_language';
+  a_columns CONSTANT name[] := '{ language_name, process_function_options, process_function_body, extract_parameters_options, extract_parameters_body }';
+  v_columns CONSTANT text := array_to_string( a_columns, ', ' );
+  v_col name;
+BEGIN
+  -- Verify view exists
+  RETURN NEXT has_view(
+    c_schema, c_name
+    -- Necessary because has_view(schema,view) doesn't exist
+    , format( $$View %I.%I should exist$$, c_schema, c_name )
+  );
+
+  -- Verify columns exist
+  RETURN NEXT columns_are(
+    c_schema, c_name
+    , a_columns
+  );
+
+  -- Check column type
+  FOREACH v_col IN ARRAY a_columns
+  LOOP
+    RETURN NEXT col_type_is(
+      c_schema, c_name
+      , v_col
+      , CASE WHEN v_col = 'language_name' THEN 'character varying(100)' ELSE 'text' END
+    );
+  END LOOP;
+
+  -- Check permissions
+  RETURN NEXT table_privs_are(
+      c_schema, c_name
+      , 'public', NULL::text[]
+  );
+  -- Not worth checking owner privs
+
+  BEGIN -- bag_eq blows up if view doesn't actually exist
+  -- Sanity check results
+  RETURN NEXT bag_eq(
+    format( $$SELECT %s FROM %I.%I$$, v_columns, c_schema, c_name )
+    , format( $$SELECT %s FROM _trunklet.language$$, v_columns )
+    , $$template_language returns same results as _trunklet.language$$
+  );
+  EXCEPTION
+    WHEN undefined_table THEN
+      NULL;
+  END;
+END
+$body$;
+
+/*
  * language__add()
  */
 CREATE OR REPLACE FUNCTION run_template_language__add(

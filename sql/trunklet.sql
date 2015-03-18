@@ -119,6 +119,16 @@ $temp$
 END
 $body$;
 
+CREATE OR REPLACE VIEW trunklet.template_language AS
+  SELECT
+      language_name
+      , process_function_options
+      , process_function_body
+      , extract_parameters_options
+      , extract_parameters_body
+    FROM _trunklet.language
+;
+
 CREATE FUNCTION trunklet.template_language__add(
   language_name _trunklet.language.language_name%TYPE
   , process_function_options _trunklet.language.process_function_options%TYPE
