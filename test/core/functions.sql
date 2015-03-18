@@ -168,6 +168,12 @@ BEGIN
     , '22023'
     , $$language_name must not be NULL$$
   );
+
+  RETURN NEXT function_privs_are(
+    'trunklet', 'template_language__add'
+    , '{ varchar(100), text, text, text, text }'
+    , 'public', NULL::text[]
+  );
 END
 $body$;
 

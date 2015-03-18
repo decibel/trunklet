@@ -179,5 +179,12 @@ BEGIN
   );
 END
 $body$;
+REVOKE ALL ON FUNCTION trunklet.template_language__add(
+  language_name _trunklet.language.language_name%TYPE
+  , process_function_options _trunklet.language.process_function_options%TYPE
+  , process_function_body _trunklet.language.process_function_body%TYPE
+  , extract_parameters_options _trunklet.language.extract_parameters_options%TYPE
+  , extract_parameters_body _trunklet.language.extract_parameters_body%TYPE
+) FROM public;
 
 -- vi: expandtab sw=2 ts=2
