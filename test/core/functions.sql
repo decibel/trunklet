@@ -57,10 +57,20 @@ $body$;
 /*
  * TABLE _trunklet.language
  */
+CREATE OR REPLACE FUNCTION language_name_type(
+) RETURNS name LANGUAGE sql AS $$SELECT 'character varying(100)'::name$$;
+
 CREATE OR REPLACE FUNCTION test__table_language
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
 BEGIN
+  -- Mostly for sanity of our test code
+  RETURN NEXT col_type_is(
+    '_trunklet', 'language'
+    , 'language_name'::name -- Cast to get the correct test function
+    , language_name_type()
+  );
+
   RETURN NEXT throws_ok(
     $$INSERT INTO _trunklet.language
       VALUES(
@@ -108,7 +118,7 @@ BEGIN
     RETURN NEXT col_type_is(
       c_schema, c_name
       , v_col
-      , CASE WHEN v_col = 'language_name' THEN 'character varying(100)' ELSE 'text' END
+      , CASE WHEN v_col = 'language_name' THEN language_name_type() ELSE 'text' END
     );
   END LOOP;
 
@@ -171,7 +181,7 @@ BEGIN
 
   RETURN NEXT function_privs_are(
     'trunklet', 'template_language__add'
-    , '{ varchar(100), text, text, text, text }'
+    , ('{ ' || language_name_type() || ', text, text, text, text }')::text[]
     , 'public', NULL::text[]
   );
 END
