@@ -57,7 +57,7 @@ CREATE TABLE _trunklet.language(
 );
 
 
-CREATE FUNCTION _trunklet.create_function(
+CREATE FUNCTION _trunklet.create_language_function(
   language_id _trunklet.language.language_id%TYPE
   , language_name text
   , return_type text
@@ -160,7 +160,7 @@ BEGIN
     INTO STRICT fn.language_id
   ;
 
-  PERFORM _trunklet.create_function(
+  PERFORM _trunklet.create_language_function(
     language_id
     , language_name
     , 'text'
@@ -169,7 +169,7 @@ BEGIN
     , 'process'
   );
 
-  PERFORM _trunklet.create_function(
+  PERFORM _trunklet.create_language_function(
     language_id
     , language_name
     , 'variant.variant(trunklet_parameter)'
