@@ -9,7 +9,8 @@ SET client_min_messages = warning;
 CREATE SCHEMA _trunklet;
 
 CREATE SCHEMA _trunklet_functions;
-GRANT USAGE, CREATE ON SCHEMA _trunklet_functions TO public;
+-- TODO: Create a trunklet__usage role and us it here instead of public
+GRANT USAGE ON SCHEMA _trunklet_functions TO public; -- Languages currently created as extension owner
 COMMENT ON SCHEMA _trunklet_functions IS $$Schema that contains support functions for languages registered in trunklet. Not intended for general use.$$;
 
 CREATE SCHEMA trunklet;
