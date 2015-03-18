@@ -56,6 +56,26 @@ CREATE TABLE _trunklet.language(
   , extract_parameters_options text NOT NULL
   , extract_parameters_body text NOT NULL
 );
+CREATE OR REPLACE FUNCTION _trunklet.language__get_id(
+  language_name _trunklet.language.language_name%TYPE
+) RETURNS _trunklet.language.language_id%TYPE LANGUAGE plpgsql AS $body$
+DECLARE
+  v_id _trunklet.language.language_id%TYPE;
+BEGIN
+  SELECT INTO STRICT v_id
+      language_id
+    FROM _trunklet.language l
+    WHERE l.language_name = language__get_id.language_name
+  ;
+  RETURN v_id;
+EXCEPTION
+  WHEN no_data_found THEN
+    RAISE EXCEPTION 'language "%" not found', language_name;
+END
+$body$;
+REVOKE ALL ON FUNCTION _trunklet.language__get_id(
+  language_name _trunklet.language.language_name%TYPE
+) FROM public;
 
 
 CREATE OR REPLACE FUNCTION _trunklet.create_language_function(

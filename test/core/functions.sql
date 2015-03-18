@@ -87,6 +87,30 @@ END
 $body$;
 
 /*
+ * FUNCTION _trunklet.language__get_id
+ */
+CREATE OR REPLACE FUNCTION bogus_language_name(
+) RETURNS text LANGUAGE sql AS $$SELECT 'bogus template language that does not exist'::text$$;
+
+CREATE OR REPLACE FUNCTION test_language__get_id
+--\i test/helpers/f1.sql
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  RETURN NEXT function_privs_are(
+    '_trunklet', 'language__get_id'
+    , ('{' || language_name_type() || '}')::text[]
+    , 'public', NULL::text[]
+  );
+
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.language__get_id( %L )$$, bogus_language_name() )
+    , format( $$language "%s" not found$$, bogus_language_name() )
+  );
+END
+$body$;
+
+/*
  * VIEW template_language
  */
 CREATE OR REPLACE FUNCTION test_template_language
