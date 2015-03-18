@@ -1,9 +1,21 @@
+# Editor stuff
 .*.swp
-results/
+
+# Build output
 *.so
-tmp/
 *.o
+.deps/
+
+# dist output
+/trunklet-*.zip
+
+/sql/trunklet--*
+!/sql/trunklet--*--*.sql
+
+# Test artifacts
+results/
 regression.diffs
 regression.out
-/sql/ extension_name =>--*
-!/sql/<%= extension_name =>--*--*.sql
+
+# Misc crap
+tmp/
