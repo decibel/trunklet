@@ -11,16 +11,16 @@ $body$;
 */
 
 /*
- * _trunklet.language_name__sanity()
+ * _trunklet.name_sanity()
  */
-CREATE OR REPLACE FUNCTION run__language_name__sanity(
+CREATE OR REPLACE FUNCTION run__name_sanity(
   text
 ) RETURNS text LANGUAGE sql AS $body$
-  SELECT 'SELECT _trunklet.language_name__sanity( '
+  SELECT $$SELECT _trunklet.name_sanity( 'language_name', $$
     || quote_nullable($1) || ' )'
 $body$;
 
-CREATE OR REPLACE FUNCTION test__language_name__sanity
+CREATE OR REPLACE FUNCTION test__name_sanity
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   t text;
@@ -46,7 +46,7 @@ BEGIN
   FOREACH a SLICE 1 IN ARRAY tests
   LOOP
     RETURN NEXT throws_ok(
-      run__language_name__sanity(a[1])
+      run__name_sanity(a[1])
       , '22023'
       , 'language_name must not ' || a[2]
     );

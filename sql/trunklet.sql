@@ -25,23 +25,24 @@ BEGIN
 END
 $f$;
 
-CREATE OR REPLACE FUNCTION _trunklet.language_name__sanity(
-  language_name text
+CREATE OR REPLACE FUNCTION _trunklet.name_sanity(
+  field_name text
+  , value text
 ) RETURNS boolean LANGUAGE plpgsql AS $body$
 DECLARE
   error CONSTANT text := CASE
-    WHEN language_name IS NULL THEN 'be NULL'
-    WHEN language_name = '' THEN 'be blank'
+    WHEN value IS NULL THEN 'be NULL'
+    WHEN value = '' THEN 'be blank'
     -- (?n) means use newline sensitive mode
-    WHEN language_name ~ '(?n)^\s' THEN 'begin with whitespace'
-    WHEN language_name ~ '(?n)\s$' THEN 'end with whitespace'
+    WHEN value ~ '(?n)^\s' THEN 'begin with whitespace'
+    WHEN value ~ '(?n)\s$' THEN 'end with whitespace'
   END;
 BEGIN
   IF error IS NULL THEN
     RETURN true;
   END IF;
 
-  RAISE EXCEPTION 'language_name must not %', error
+  RAISE EXCEPTION '% must not %', field_name, error
     USING ERRCODE = 'invalid_parameter_value'
   ;
 END
@@ -49,7 +50,7 @@ $body$;
 
 CREATE TABLE _trunklet.language(
   language_id     serial    PRIMARY KEY NOT NULL
-  , language_name varchar(100)  UNIQUE NOT NULL CHECK(_trunklet.language_name__sanity(language_name))
+  , language_name varchar(100)  UNIQUE NOT NULL CHECK(_trunklet.name_sanity( 'language_name', language_name ))
   -- I don't think we'll need these fields, but better safe than sorry
   , process_function_options text NOT NULL
   , process_function_body text NOT NULL
@@ -162,7 +163,7 @@ DECLARE
   language_id _trunklet.language.language_id%TYPE;
 BEGIN
   -- Do explicit sanity check for better error messages
-  PERFORM _trunklet.language_name__sanity(language_name);
+  PERFORM _trunklet.name_sanity( 'language_name', language_name );
 
   INSERT INTO _trunklet.language(
         language_name
