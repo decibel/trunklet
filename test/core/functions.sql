@@ -2,7 +2,7 @@ CREATE SCHEMA _trunklet_test;
 SET search_path = _trunklet_test, tap, "$user";
 
 /*
-CREATE FUNCTION test_
+CREATE OR REPLACE FUNCTION test_
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
 BEGIN
@@ -13,14 +13,14 @@ $body$;
 /*
  * _trunklet.language_name__sanity()
  */
-CREATE FUNCTION run__language_name__sanity(
+CREATE OR REPLACE FUNCTION run__language_name__sanity(
   text
 ) RETURNS text LANGUAGE sql AS $body$
   SELECT 'SELECT _trunklet.language_name__sanity( '
     || quote_nullable($1) || ' )'
 $body$;
 
-CREATE FUNCTION test__language_name__sanity
+CREATE OR REPLACE FUNCTION test__language_name__sanity
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   t text;
@@ -57,7 +57,7 @@ $body$;
 /*
  * TABLE _trunklet.language
  */
-CREATE FUNCTION test__table_language
+CREATE OR REPLACE FUNCTION test__table_language
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
 BEGIN
@@ -79,7 +79,7 @@ $body$;
 /*
  * language__add()
  */
-CREATE FUNCTION run_template_language__add(
+CREATE OR REPLACE FUNCTION run_template_language__add(
   text
   , text = $$LANGUAGE sql$$
   , text = $$SELECT ''$$
@@ -94,7 +94,7 @@ CREATE FUNCTION run_template_language__add(
     || quote_nullable($5) || ' )'
 $body$;
 
-CREATE FUNCTION test_template_language__add
+CREATE OR REPLACE FUNCTION test_template_language__add
 --\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
