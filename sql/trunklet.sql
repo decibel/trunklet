@@ -15,7 +15,7 @@ COMMENT ON SCHEMA _trunklet_functions IS $$Schema that contains support function
 CREATE SCHEMA trunklet;
 GRANT USAGE ON SCHEMA trunklet TO public;
 
-CREATE FUNCTION _trunklet.exec(
+CREATE OR REPLACE FUNCTION _trunklet.exec(
   sql text
 ) RETURNS void LANGUAGE plpgsql AS $f$
 BEGIN
@@ -57,7 +57,7 @@ CREATE TABLE _trunklet.language(
 );
 
 
-CREATE FUNCTION _trunklet.create_language_function(
+CREATE OR REPLACE FUNCTION _trunklet.create_language_function(
   language_id _trunklet.language.language_id%TYPE
   , language_name text
   , return_type text
@@ -93,7 +93,7 @@ BEGIN
 
       -- Actual function creation template
       $temp$
-CREATE FUNCTION %1$s RETURNS %2$I %3$s AS %4$L;
+CREATE OR REPLACE FUNCTION %1$s RETURNS %2$I %3$s AS %4$L;
 COMMENT ON FUNCTION %1$s IS $$%5$s function for trunklet language "$$ || %6$L || $$". Not intended for general use.$$;
 $temp$
 
@@ -129,7 +129,7 @@ CREATE OR REPLACE VIEW trunklet.template_language AS
     FROM _trunklet.language
 ;
 
-CREATE FUNCTION trunklet.template_language__add(
+CREATE OR REPLACE FUNCTION trunklet.template_language__add(
   language_name _trunklet.language.language_name%TYPE
   , process_function_options _trunklet.language.process_function_options%TYPE
   , process_function_body _trunklet.language.process_function_body%TYPE
