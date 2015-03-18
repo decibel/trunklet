@@ -66,7 +66,7 @@ CREATE FUNCTION _trunklet.create_function(
   , function_type text
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
-  -- text version of langueg_id that is 0 padded
+  -- text version of language_id that is 0 padded
   formatted_id CONSTANT text := to_char(
     language_id
     -- Get a string of 0's long enough to hold a max-sized int
