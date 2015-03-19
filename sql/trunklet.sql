@@ -6,6 +6,11 @@
 
 SET client_min_messages = warning;
 
+-- Register our variants
+SELECT variant.register( 'trunklet_template', '{}' );
+SELECT variant.register( 'trunklet_parameter', '{}' );
+SELECT variant.register( 'trunklet_return', '{}' );
+
 CREATE SCHEMA _trunklet;
 
 CREATE SCHEMA _trunklet_functions;
@@ -71,7 +76,9 @@ BEGIN
   RETURN v_id;
 EXCEPTION
   WHEN no_data_found THEN
-    RAISE EXCEPTION 'language "%" not found', language_name;
+    RAISE EXCEPTION 'language "%" not found', language_name
+      USING ERRCODE = 'no_data_found'
+    ;
 END
 $body$;
 REVOKE ALL ON FUNCTION _trunklet.language__get_id(
@@ -88,25 +95,26 @@ CREATE OR REPLACE FUNCTION _trunklet.create_language_function(
   , function_type text
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
-  -- text version of language_id that is 0 padded
-  formatted_id CONSTANT text := to_char(
+  -- text version of language_id that is 0 padded. btrim shouldn't be necessary but is.
+  formatted_id CONSTANT text := btrim( to_char(
     language_id
     -- Get a string of 0's long enough to hold a max-sized int
     , repeat( '0', length( (2^31-1)::int::text ) )
-  );
+  ) );
 
   func_name CONSTANT text := format( 'language_id_%s__%s', formatted_id, function_type );
   func_full_name CONSTANT text := format(
     -- Name template
     $name$_trunklet_functions.%1$s(
-    template variant(trunklet_template)
-    , parameters variant(trunklet_parameter)[]
+    template variant.variant(trunklet_template)
+    , parameters variant.variant(trunklet_parameter)[]
   )
     $name$
     , func_name
   );
 
 BEGIN
+  RAISE DEBUG 'func_full_name = %', func_full_name;
   PERFORM _trunklet.exec(
     /*
      * This is the SQL string we'll use to actually create the function.
@@ -115,12 +123,12 @@ BEGIN
 
       -- Actual function creation template
       $temp$
-CREATE OR REPLACE FUNCTION %1$s RETURNS %2$I %3$s AS %4$L;
-COMMENT ON FUNCTION %1$s IS $$%5$s function for trunklet language "$$ || %6$L || $$". Not intended for general use.$$;
+CREATE OR REPLACE FUNCTION %1$s RETURNS %2$s %3$s AS %4$L;
+COMMENT ON FUNCTION %1$s IS $$%5$s function for trunklet language "%6$s". Not intended for general use.$$;
 $temp$
 
       -- Parameters for function template
-      , funk_full_name
+      , func_full_name
       , return_type
       , function_options
       , function_body
@@ -132,8 +140,13 @@ $temp$
   /*
    * The language functions could be executed by any random user, so make
    * certain that they're not security definer.
+   *
+   * Note that regprocedure pukes on variant.variant as a type name. That means
+   * we can't easily get our exact procedure, though in this case proname alone
+   * should be unique. We ultimately just need to ensure there's no SECDEF
+   * procedures at all...
    */
-  IF ( SELECT prosecdef FROM pg_proc WHERE oid = func_full_name::regprocedure ) THEN
+  IF EXISTS( SELECT 1 FROM pg_proc WHERE proname = func_name AND prosecdef ) THEN
     RAISE EXCEPTION 'language functions may not be SECURITY DEFINER'
       USING DETAIL = format( 'language %s, %s function', language_name, function_type )
     ;
@@ -197,7 +210,7 @@ BEGIN
     , 'variant.variant(trunklet_parameter)'
     , extract_parameters_options
     , extract_parameters_body
-    , 'extract parameters'
+    , 'extract_parameters'
   );
 END
 $body$;
@@ -208,5 +221,41 @@ REVOKE ALL ON FUNCTION trunklet.template_language__add(
   , extract_parameters_options _trunklet.language.extract_parameters_options%TYPE
   , extract_parameters_body _trunklet.language.extract_parameters_body%TYPE
 ) FROM public;
+
+
+
+/*
+ * TEMPLATES
+ */
+CREATE TABLE _trunklet.template(
+  language_id int NOT NULL REFERENCES _trunklet.language
+  , template_name text NOT NULL CHECK(_trunklet.name_sanity( 'template_name', template_name ))
+  , template_version int NOT NULL
+  , template variant.variant(trunklet_template)[] NOT NULL
+  , CONSTRAINT template__u_template_name__template_version UNIQUE( template_name, template_version )
+);
+
+/*
+CREATE OR REPLACE FUNCTION trunklet.template__store(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name text
+  , template_version int
+  , template variant(trunklet_template)[]
+) RETURNS _trunklet.template.template_id%TYPE LANGUAGE sql AS $body$
+INSERT INTO _trunklet.template(
+      language_id
+      , template_name
+      , template_version
+      , template
+    )
+  SELECT 
+      _trunklet.language__get_id( language_name )
+      , template_name
+      , template_version
+      , template
+  RETURNING template_id
+;
+$body$;
+*/
 
 -- vi: expandtab sw=2 ts=2

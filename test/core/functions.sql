@@ -2,7 +2,13 @@ CREATE SCHEMA _trunklet_test;
 SET search_path = _trunklet_test, tap, "$user";
 
 /*
-CREATE OR REPLACE FUNCTION test_
+ * NOTE! DO NOT use CREATE OR REPLACE FUNCTION in here. If you do that and
+ * accidentally try to define the same function twice you'll never detect that
+ * mistake!
+ */
+
+/*
+CREATE FUNCTION test_
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
 BEGIN
@@ -13,14 +19,14 @@ $body$;
 /*
  * _trunklet.name_sanity()
  */
-CREATE OR REPLACE FUNCTION run__name_sanity(
+CREATE FUNCTION run__name_sanity(
   text
 ) RETURNS text LANGUAGE sql AS $body$
-  SELECT $$SELECT _trunklet.name_sanity( 'language_name', $$
+  SELECT $$SELECT _trunklet.name_sanity( 'field_name', $$
     || quote_nullable($1) || ' )'
 $body$;
 
-CREATE OR REPLACE FUNCTION test__name_sanity
+CREATE FUNCTION test__name_sanity
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   t text;
@@ -48,7 +54,7 @@ BEGIN
     RETURN NEXT throws_ok(
       run__name_sanity(a[1])
       , '22023'
-      , 'language_name must not ' || a[2]
+      , 'field_name must not ' || a[2]
     );
   END LOOP;
 END
@@ -57,42 +63,74 @@ $body$;
 /*
  * TABLE _trunklet.language
  */
-CREATE OR REPLACE FUNCTION language_name_type(
+CREATE FUNCTION language_name_type(
 ) RETURNS name LANGUAGE sql AS $$SELECT 'character varying(100)'::name$$;
 
-CREATE OR REPLACE FUNCTION test__table_language
+CREATE FUNCTION test__table_language
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
+  c_schema CONSTANT name := '_trunklet';
+  c_name CONSTANT name := 'language';
 BEGIN
   -- Mostly for sanity of our test code
   RETURN NEXT col_type_is(
-    '_trunklet', 'language'
+    c_schema, c_name
     , 'language_name'::name -- Cast to get the correct test function
     , language_name_type()
   );
 
   RETURN NEXT throws_ok(
-    $$INSERT INTO _trunklet.language
-      VALUES(
-        DEFAULT, ''
-        , '', ''
-        , '', ''
-      )
-    $$
+    format(
+      $$INSERT INTO %I.%I
+        VALUES(
+          DEFAULT, ''
+          , '', ''
+          , '', ''
+        )
+      $$
+      , c_schema, c_name
+    )
     , '22023'
     , $$language_name must not be blank$$
-    , $$Verify CHECK constraint on _trunklet.language.language_name$$
+    , format(
+        $$Verify CHECK constraint on %I.%I.language_name$$
+        , c_schema, c_name
+      )
   );
+END
+$body$;
+
+/*
+ * LANGUAGE FACTORY
+ */
+CREATE FUNCTION bogus_language_name(
+) RETURNS text LANGUAGE sql AS $$SELECT 'bogus template language that does not exist'::text$$;
+CREATE FUNCTION get_test_language_name(
+) RETURNS text LANGUAGE sql AS $$SELECT 'Our internal test language'::text$$;
+CREATE FUNCTION get_test_language_id(
+) RETURNS int LANGUAGE plpgsql AS $body$
+BEGIN
+  BEGIN
+  PERFORM trunklet.template_language__add(
+      get_test_language_name()
+      , 'LANGUAGE sql'
+      , $$SELECT ''::text$$
+      , 'LANGUAGE sql'
+      , $$SELECT ''::text::variant.variant$$
+    );
+  EXCEPTION
+    -- TODO: incorrect return value
+    WHEN no_data_found THEN
+      NULL;
+  END;
+  RETURN _trunklet.language__get_id( get_test_language_name() );
 END
 $body$;
 
 /*
  * FUNCTION _trunklet.language__get_id
  */
-CREATE OR REPLACE FUNCTION bogus_language_name(
-) RETURNS text LANGUAGE sql AS $$SELECT 'bogus template language that does not exist'::text$$;
-
-CREATE OR REPLACE FUNCTION test_language__get_id
+CREATE FUNCTION test_language__get_id
 --\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
@@ -105,6 +143,7 @@ BEGIN
 
   RETURN NEXT throws_ok(
     format( $$SELECT _trunklet.language__get_id( %L )$$, bogus_language_name() )
+    , 'P0002'
     , format( $$language "%s" not found$$, bogus_language_name() )
   );
 END
@@ -113,7 +152,7 @@ $body$;
 /*
  * VIEW template_language
  */
-CREATE OR REPLACE FUNCTION test_template_language
+CREATE FUNCTION test_template_language
 --\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
@@ -170,7 +209,8 @@ $body$;
 /*
  * language__add()
  */
-CREATE OR REPLACE FUNCTION run_template_language__add(
+-- NOTE: These default values won't actually work
+CREATE FUNCTION run_template_language__add(
   text
   , text = $$LANGUAGE sql$$
   , text = $$SELECT ''$$
@@ -185,7 +225,7 @@ CREATE OR REPLACE FUNCTION run_template_language__add(
     || quote_nullable($5) || ' )'
 $body$;
 
-CREATE OR REPLACE FUNCTION test_template_language__add
+CREATE FUNCTION test_template_language__add
 --\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
@@ -203,10 +243,63 @@ BEGIN
     , $$language_name must not be NULL$$
   );
 
+  RETURN NEXT ok(
+    get_test_language_id() IS NOT NULL
+    , 'Verify we can create test language'
+  );
+
   RETURN NEXT function_privs_are(
     'trunklet', 'template_language__add'
     , ('{ ' || language_name_type() || ', text, text, text, text }')::text[]
     , 'public', NULL::text[]
+  );
+END
+$body$;
+
+/*
+ * TABLE _trunklet.template
+ */
+CREATE FUNCTION test__table_template
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_schema CONSTANT name := '_trunklet';
+  c_name CONSTANT name := 'template';
+  c_language_id CONSTANT int := get_test_language_id();
+BEGIN
+  RETURN NEXT ok(
+    c_language_id IS NOT NULL
+    , 'c_language_id IS NOT NULL'
+  );
+
+  RETURN NEXT col_is_unique(
+    c_schema, c_name
+    , '{template_name, template_version}'::name[]
+    , '(template_name, template_version) should be unique'
+  );
+
+  RETURN NEXT throws_ok(
+    format(
+      $$INSERT INTO %I.%I(
+            language_id
+            , template_name
+            , template_version
+            , template
+          )
+          SELECT language_id
+              , ''
+              , 1
+              , '{}'
+            FROM _trunklet.language
+            LIMIT 1
+      $$
+      , c_schema, c_name
+    )
+    , '22023'
+    , $$template_name must not be blank$$
+    , format(
+        $$Verify CHECK constraint on %I.%I.template_name$$
+        , c_schema, c_name
+      )
   );
 END
 $body$;

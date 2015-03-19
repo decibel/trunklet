@@ -1,7 +1,10 @@
 \set ECHO none
 BEGIN;
 \i test/helpers/tap_setup.sql
-\i sql/trunklet.sql
+--\i sql/trunklet.sql
+CREATE EXTENSION variant;
+CREATE EXTENSION trunklet;
+
 \i test/core/functions.sql
 
 -- Needed for now due to bug in pgtap-core.sql
