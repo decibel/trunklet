@@ -82,8 +82,16 @@ BEGIN
   RETURN NEXT throws_ok(
     format(
       $$INSERT INTO %I.%I
+          ( language_name
+            , parameter_type
+            , template_type
+            , process_function_options, process_function_body
+            , extract_parameters_options, extract_parameters_body
+          )
         VALUES(
-          DEFAULT, ''
+          ''
+          , 'text'
+          , 'text'
           , '', ''
           , '', ''
         )
@@ -113,6 +121,8 @@ BEGIN
   BEGIN
   PERFORM trunklet.template_language__add(
       get_test_language_name()
+      , 'text[][]'
+      , 'text'
       , 'LANGUAGE sql'
       , $$SELECT ''::text$$
       , 'LANGUAGE sql'
@@ -158,7 +168,7 @@ CREATE FUNCTION test_template_language
 DECLARE
   c_schema CONSTANT name := 'trunklet';
   c_name CONSTANT name := 'template_language';
-  a_columns CONSTANT name[] := '{ language_name, process_function_options, process_function_body, extract_parameters_options, extract_parameters_body }';
+  a_columns CONSTANT name[] := '{ language_name, parameter_type, template_type, process_function_options, process_function_body, extract_parameters_options, extract_parameters_body }';
   v_columns CONSTANT text := array_to_string( a_columns, ', ' );
   v_col name;
 BEGIN
@@ -174,16 +184,6 @@ BEGIN
     c_schema, c_name
     , a_columns
   );
-
-  -- Check column type
-  FOREACH v_col IN ARRAY a_columns
-  LOOP
-    RETURN NEXT col_type_is(
-      c_schema, c_name
-      , v_col
-      , CASE WHEN v_col = 'language_name' THEN language_name_type() ELSE 'text' END
-    );
-  END LOOP;
 
   -- Check permissions
   RETURN NEXT table_privs_are(
@@ -212,6 +212,8 @@ $body$;
 -- NOTE: These default values won't actually work
 CREATE FUNCTION run_template_language__add(
   text
+  , text = $$text[][]$$
+  , text = $$text$$
   , text = $$LANGUAGE sql$$
   , text = $$SELECT ''$$
   , text = $$LANGUAGE sql$$
@@ -222,7 +224,9 @@ CREATE FUNCTION run_template_language__add(
     || quote_nullable($2) || ', '
     || quote_nullable($3) || ', '
     || quote_nullable($4) || ', '
-    || quote_nullable($5) || ' )'
+    || quote_nullable($5) || ', '
+    || quote_nullable($6) || ', '
+    || quote_nullable($7) || ' )'
 $body$;
 
 CREATE FUNCTION test_template_language__add
@@ -247,10 +251,22 @@ BEGIN
     get_test_language_id() IS NOT NULL
     , 'Verify we can create test language'
   );
+  RETURN NEXT ok(
+    EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_template' ) WHERE allowed_type = 'text'::regtype)
+    , 'Verify type added to registered variant "trunklet_template"'
+  );
+  RETURN NEXT ok(
+    EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_parameter' ) WHERE allowed_type = 'text[]'::regtype)
+    , 'Verify type added to registered variant "trunklet_parameter"'
+  );
+  RETURN NEXT ok(
+    EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_return' ) WHERE allowed_type = 'text[]'::regtype)
+    , 'Verify type added to registered variant "trunklet_return"'
+  );
 
   RETURN NEXT function_privs_are(
     'trunklet', 'template_language__add'
-    , ('{ ' || language_name_type() || ', text, text, text, text }')::text[]
+    , ('{ ' || language_name_type() || ', regtype, regtype, text, text, text, text }')::text[]
     , 'public', NULL::text[]
   );
 END
@@ -288,7 +304,7 @@ BEGIN
           SELECT language_id
               , ''
               , 1
-              , '{}'
+              , ''::text
             FROM _trunklet.language
             LIMIT 1
       $$
@@ -300,6 +316,38 @@ BEGIN
         $$Verify CHECK constraint on %I.%I.template_name$$
         , c_schema, c_name
       )
+  );
+END
+$body$;
+
+/*
+ * FUNCTION trunklet.template__add
+ */
+CREATE FUNCTION test_template__add
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  PERFORM get_test_language_id();
+
+  RETURN NEXT lives_ok(
+    /*
+     * Need to explicitly cast to variant because PG doesn't consider this to
+     * be an assignment cast. Even if it did, it ignores typmod in function
+     * parameters. :(
+     */
+    $$SELECT trunklet.template__add( get_test_language_name(), 'test template', 'test 1'::text::variant.variant(trunklet_template) )$$
+    , 'Create test template v1'
+  );
+  RETURN NEXT lives_ok(
+    $$SELECT trunklet.template__add( get_test_language_name(), 'test template', 2, 'test 2'::text::variant.variant(trunklet_template) )$$
+    , 'Create test template v1'
+  );
+
+  RETURN NEXT bag_eq(
+    -- Need to cast variant to text because it doesn't have an equality operator family
+    $$SELECT language_name, template_version, template::text FROM _trunklet.template t JOIN _trunklet.language l USING( language_id ) WHERE template_name = 'test template'$$
+    , $$SELECT get_test_language_name(), i, ('test ' || i) FROM generate_series(1,2) AS i(i)$$
+    , $$Verify template__add results$$
   );
 END
 $body$;

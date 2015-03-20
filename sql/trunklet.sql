@@ -56,12 +56,17 @@ $body$;
 CREATE TABLE _trunklet.language(
   language_id     serial    PRIMARY KEY NOT NULL
   , language_name varchar(100)  UNIQUE NOT NULL CHECK(_trunklet.name_sanity( 'language_name', language_name ))
+  , parameter_type regtype NOT NULL
+  , template_type regtype NOT NULL
   -- I don't think we'll need these fields, but better safe than sorry
   , process_function_options text NOT NULL
   , process_function_body text NOT NULL
   , extract_parameters_options text NOT NULL
   , extract_parameters_body text NOT NULL
 );
+COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used to pass parameters to templates in this language.$$;
+COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used by templates in this language.$$;
+-- TODO: Add AFTER UPDATE trigger to re-validate the type of all stored templates for a language if template_type changes
 CREATE OR REPLACE FUNCTION _trunklet.language__get_id(
   language_name _trunklet.language.language_name%TYPE
 ) RETURNS _trunklet.language.language_id%TYPE LANGUAGE plpgsql AS $body$
@@ -157,6 +162,8 @@ $body$;
 CREATE OR REPLACE VIEW trunklet.template_language AS
   SELECT
       language_name
+      , parameter_type
+      , template_type
       , process_function_options
       , process_function_body
       , extract_parameters_options
@@ -166,6 +173,8 @@ CREATE OR REPLACE VIEW trunklet.template_language AS
 
 CREATE OR REPLACE FUNCTION trunklet.template_language__add(
   language_name _trunklet.language.language_name%TYPE
+  , parameter_type _trunklet.language.parameter_type%TYPE
+  , template_type _trunklet.language.template_type%TYPE
   , process_function_options _trunklet.language.process_function_options%TYPE
   , process_function_body _trunklet.language.process_function_body%TYPE
   , extract_parameters_options _trunklet.language.extract_parameters_options%TYPE
@@ -180,6 +189,8 @@ BEGIN
 
   INSERT INTO _trunklet.language(
         language_name
+        , parameter_type
+        , template_type
         , process_function_options
         , process_function_body
         , extract_parameters_options
@@ -187,12 +198,19 @@ BEGIN
       )
     SELECT
       language_name
+      , parameter_type
+      , template_type
       , process_function_options
       , process_function_body
       , extract_parameters_options
       , extract_parameters_body
     RETURNING language.language_id
     INTO STRICT fn.language_id
+  ;
+
+  PERFORM variant.add_type( 'trunklet_template', template_type::text );
+  PERFORM variant.add_type( variant_name, parameter_type::text )
+    FROM unnest( '{trunklet_parameter,trunklet_return}'::text[] ) a( variant_name )
   ;
 
   PERFORM _trunklet.create_language_function(
@@ -216,6 +234,8 @@ END
 $body$;
 REVOKE ALL ON FUNCTION trunklet.template_language__add(
   language_name _trunklet.language.language_name%TYPE
+  , parameter_type _trunklet.language.parameter_type%TYPE
+  , template_type _trunklet.language.template_type%TYPE
   , process_function_options _trunklet.language.process_function_options%TYPE
   , process_function_body _trunklet.language.process_function_body%TYPE
   , extract_parameters_options _trunklet.language.extract_parameters_options%TYPE
@@ -231,17 +251,16 @@ CREATE TABLE _trunklet.template(
   language_id int NOT NULL REFERENCES _trunklet.language
   , template_name text NOT NULL CHECK(_trunklet.name_sanity( 'template_name', template_name ))
   , template_version int NOT NULL
-  , template variant.variant(trunklet_template)[] NOT NULL
+  , template variant.variant(trunklet_template) NOT NULL
   , CONSTRAINT template__u_template_name__template_version UNIQUE( template_name, template_version )
 );
 
-/*
-CREATE OR REPLACE FUNCTION trunklet.template__store(
+CREATE OR REPLACE FUNCTION trunklet.template__add(
   language_name _trunklet.language.language_name%TYPE
-  , template_name text
-  , template_version int
-  , template variant(trunklet_template)[]
-) RETURNS _trunklet.template.template_id%TYPE LANGUAGE sql AS $body$
+  , template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE 
+  , template _trunklet.template.template%TYPE 
+) RETURNS void LANGUAGE sql AS $body$
 INSERT INTO _trunklet.template(
       language_id
       , template_name
@@ -249,13 +268,18 @@ INSERT INTO _trunklet.template(
       , template
     )
   SELECT 
-      _trunklet.language__get_id( language_name )
-      , template_name
-      , template_version
-      , template
-  RETURNING template_id
+      _trunklet.language__get_id( $1 )
+      , $2
+      , $3
+      , $4
 ;
 $body$;
-*/
+CREATE OR REPLACE FUNCTION trunklet.template__add(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , template _trunklet.template.template%TYPE 
+) RETURNS void LANGUAGE sql AS $body$
+SELECT trunklet.template__add( $1, $2, 1, $3 )
+$body$;
 
 -- vi: expandtab sw=2 ts=2
