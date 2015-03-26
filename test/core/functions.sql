@@ -130,7 +130,7 @@ BEGIN
     );
   EXCEPTION
     -- TODO: incorrect return value
-    WHEN no_data_found THEN
+    WHEN no_data_found OR unique_violation THEN
       NULL;
   END;
   RETURN _trunklet.language__get_id( get_test_language_name() );
@@ -321,34 +321,74 @@ END
 $body$;
 
 /*
+ * FUNCTION _trunklet.template__get
+ */
+CREATE FUNCTION test_template__get
+--\i test/helpers/f1.sql
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  RETURN NEXT function_privs_are(
+    '_trunklet', 'template__get'
+    , ('{' || language_name_type() || ', text, int}')::text[]
+    , 'public', NULL::text[]
+  );
+
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, bogus_language_name() )
+    , 'P0002'
+    , format( $$language "%s" not found$$, bogus_language_name() )
+  );
+
+  PERFORM get_test_language_id();
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, get_test_language_name() )
+    , 'P0002'
+    , format( $$template with language "%s", template name "bogus" and version 1 not found$$, get_test_language_name() )
+  );
+END
+$body$;
+
+
+/*
  * FUNCTION trunklet.template__add
  */
 
 /*
  * We need this function to prevent the planner from attempting to directly
- * cast text to variant during function compilation, before get_test_langueg_id
+ * cast text to variant during function compilation, before get_test_language_id
  * has allowed text as a type for that variant.
  */
 CREATE FUNCTION text_to_trunklet_template(
   text
 ) RETURNS variant.variant(trunklet_template) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_template); END$$;
+CREATE FUNCTION get_test_templates(
+) RETURNS int[] LANGUAGE plpgsql AS $body$
+DECLARE
+  ids int[];
+BEGIN
+  BEGIN
+    SELECT ids INTO ids FROM test_templates;
+  EXCEPTION
+    WHEN undefined_table THEN
+      PERFORM get_test_language_id();
+
+      ids[1] := trunklet.template__add( get_test_language_name(), 'test template', text_to_trunklet_template('test 1') );
+      ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, text_to_trunklet_template('test 2') );
+
+      -- See also test_template__remove
+      CREATE TEMP TABLE test_templates AS VALUES(ids);
+  END;
+
+  RETURN ids;
+END
+$body$;
 
 CREATE FUNCTION test_template__add
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
-  ids int[];
-  template variant.variant(trunklet_template);
+  ids CONSTANT int[] := get_test_templates();
 BEGIN
-  PERFORM get_test_language_id();
-
-  /*
-   * Need to explicitly cast to variant because PG doesn't consider this to
-   * be an assignment cast. Even if it did, it ignores typmod in function
-   * parameters. :(
-   */
-  ids[1] := trunklet.template__add( get_test_language_name(), 'test template', text_to_trunklet_template('test 1') );
-  ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, text_to_trunklet_template('test 2') );
-
   RETURN NEXT bag_eq(
     -- Need to cast variant to text because it doesn't have an equality operator family
     $$SELECT language_name
@@ -371,5 +411,41 @@ BEGIN
   );
 END
 $body$;
+
+
+
+/*
+ * FUNCTION trunklet.template__remove
+ */
+CREATE FUNCTION test_template__remove
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  ids int[];
+  test_sql CONSTANT text := 
+    $$SELECT * FROM _trunklet.template WHERE template_id = ANY( %L )$$
+  ;
+BEGIN
+  ids := get_test_templates();
+  PERFORM trunklet.template__remove( get_test_language_name(), 'test template' );
+  PERFORM trunklet.template__remove( get_test_language_name(), 'test template', 2 );
+  -- Drop temp table now that templates are gone
+  DROP TABLE test_templates;
+
+  RETURN NEXT is_empty(
+    format( test_sql, ids )
+    , $$Test templates removed by name/version$$
+  );
+
+  ids := get_test_templates();
+  PERFORM trunklet.template__remove( id ) FROM unnest(ids) AS i(id);
+  DROP TABLE test_templates;
+
+  RETURN NEXT is_empty(
+    format( test_sql, ids )
+    , $$Test templates removed by id$$
+  );
+END
+$body$;
+
 
 -- vi: expandtab sw=2 ts=2

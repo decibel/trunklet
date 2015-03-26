@@ -261,6 +261,39 @@ CREATE TABLE _trunklet.template(
   , CONSTRAINT template__u_template_name__template_version UNIQUE( template_name, template_version )
 );
 
+CREATE OR REPLACE FUNCTION _trunklet.template__get(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE DEFAULT 1
+) RETURNS _trunklet.template LANGUAGE plpgsql AS $body$
+DECLARE
+  v_language_id CONSTANT _trunklet.language.language_id%TYPE := _trunklet.language__get_id( language_name );
+  r _trunklet.template;
+BEGIN
+  SELECT * INTO STRICT r
+    FROM _trunklet.template t
+    WHERE t.language_id = v_language_id
+      AND t.template_name = template__get.template_name
+      AND t.template_version = template__get.template_version
+  ;
+
+  RETURN r;
+EXCEPTION
+  WHEN no_data_found THEN
+    RAISE EXCEPTION 'template with language "%", template name "%" and version % not found'
+        , language_name
+        , template_name
+        , template_version
+      USING ERRCODE = 'no_data_found'
+    ;
+END
+$body$;
+REVOKE ALL ON FUNCTION _trunklet.template__get(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE
+) FROM public;
+
 CREATE OR REPLACE FUNCTION trunklet.template__add(
   language_name _trunklet.language.language_name%TYPE
   , template_name _trunklet.template.template_name%TYPE
@@ -289,5 +322,17 @@ CREATE OR REPLACE FUNCTION trunklet.template__add(
 SELECT trunklet.template__add( $1, $2, 1, $3 )
 $body$;
 
+CREATE OR REPLACE FUNCTION trunklet.template__remove(
+  template_id _trunklet.template.template_id%TYPE
+) RETURNS void SECURITY DEFINER LANGUAGE sql AS $body$
+DELETE FROM _trunklet.template WHERE template_id = $1
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.template__remove(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE DEFAULT 1
+) RETURNS void SECURITY DEFINER LANGUAGE sql AS $body$
+SELECT trunklet.template__remove( (_trunklet.template__get( $1, $2, $3 )).template_id )
+$body$;
 
 -- vi: expandtab sw=2 ts=2
