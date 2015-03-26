@@ -208,9 +208,14 @@ BEGIN
     INTO STRICT fn.language_id
   ;
 
-  PERFORM variant.add_type( 'trunklet_template', template_type::text );
-  PERFORM variant.add_type( variant_name, parameter_type::text )
-    FROM unnest( '{trunklet_parameter,trunklet_return}'::text[] ) a( variant_name )
+  RAISE DEBUG 'variant.variant(trunklet_template) allowed types: %'
+    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_template', template_type::text ) ), ', ' )
+  ;
+  RAISE DEBUG 'variant.variant(trunklet_parameter) allowed types: %'
+    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_parameter', parameter_type::text ) ), ', ' )
+  ;
+  RAISE DEBUG 'variant.variant(trunklet_return) allowed types: %'
+    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_return', parameter_type::text ) ), ', ' )
   ;
 
   PERFORM _trunklet.create_language_function(
@@ -248,7 +253,8 @@ REVOKE ALL ON FUNCTION trunklet.template_language__add(
  * TEMPLATES
  */
 CREATE TABLE _trunklet.template(
-  language_id int NOT NULL REFERENCES _trunklet.language
+  template_id serial NOT NULL PRIMARY KEY
+  , language_id int NOT NULL REFERENCES _trunklet.language
   , template_name text NOT NULL CHECK(_trunklet.name_sanity( 'template_name', template_name ))
   , template_version int NOT NULL
   , template variant.variant(trunklet_template) NOT NULL
@@ -260,7 +266,7 @@ CREATE OR REPLACE FUNCTION trunklet.template__add(
   , template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE 
   , template _trunklet.template.template%TYPE 
-) RETURNS void LANGUAGE sql AS $body$
+) RETURNS _trunklet.template.template_id%TYPE SECURITY DEFINER LANGUAGE sql AS $body$
 INSERT INTO _trunklet.template(
       language_id
       , template_name
@@ -272,14 +278,16 @@ INSERT INTO _trunklet.template(
       , $2
       , $3
       , $4
+  RETURNING template_id
 ;
 $body$;
 CREATE OR REPLACE FUNCTION trunklet.template__add(
   language_name _trunklet.language.language_name%TYPE
   , template_name _trunklet.template.template_name%TYPE
   , template _trunklet.template.template%TYPE 
-) RETURNS void LANGUAGE sql AS $body$
+) RETURNS _trunklet.template.template_id%TYPE LANGUAGE sql AS $body$
 SELECT trunklet.template__add( $1, $2, 1, $3 )
 $body$;
+
 
 -- vi: expandtab sw=2 ts=2

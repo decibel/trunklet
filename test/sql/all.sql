@@ -1,13 +1,8 @@
 \set ECHO none
-BEGIN;
-\i test/helpers/tap_setup.sql
---\i sql/trunklet.sql
-CREATE EXTENSION variant;
-CREATE EXTENSION trunklet;
-
-\i test/core/functions.sql
+\i test/helpers/setup.sql
 
 -- Needed for now due to bug in pgtap-core.sql
 SET client_min_messages = WARNING;
+--SET client_min_messages = debug;
 
 SELECT * FROM runtests( '_trunklet_test'::name );

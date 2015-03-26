@@ -323,30 +323,50 @@ $body$;
 /*
  * FUNCTION trunklet.template__add
  */
+
+/*
+ * We need this function to prevent the planner from attempting to directly
+ * cast text to variant during function compilation, before get_test_langueg_id
+ * has allowed text as a type for that variant.
+ */
+CREATE FUNCTION text_to_trunklet_template(
+  text
+) RETURNS variant.variant(trunklet_template) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_template); END$$;
+
 CREATE FUNCTION test_template__add
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
+  ids int[];
+  template variant.variant(trunklet_template);
 BEGIN
   PERFORM get_test_language_id();
 
-  RETURN NEXT lives_ok(
-    /*
-     * Need to explicitly cast to variant because PG doesn't consider this to
-     * be an assignment cast. Even if it did, it ignores typmod in function
-     * parameters. :(
-     */
-    $$SELECT trunklet.template__add( get_test_language_name(), 'test template', 'test 1'::text::variant.variant(trunklet_template) )$$
-    , 'Create test template v1'
-  );
-  RETURN NEXT lives_ok(
-    $$SELECT trunklet.template__add( get_test_language_name(), 'test template', 2, 'test 2'::text::variant.variant(trunklet_template) )$$
-    , 'Create test template v1'
-  );
+  /*
+   * Need to explicitly cast to variant because PG doesn't consider this to
+   * be an assignment cast. Even if it did, it ignores typmod in function
+   * parameters. :(
+   */
+  ids[1] := trunklet.template__add( get_test_language_name(), 'test template', text_to_trunklet_template('test 1') );
+  ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, text_to_trunklet_template('test 2') );
 
   RETURN NEXT bag_eq(
     -- Need to cast variant to text because it doesn't have an equality operator family
-    $$SELECT language_name, template_version, template::text FROM _trunklet.template t JOIN _trunklet.language l USING( language_id ) WHERE template_name = 'test template'$$
-    , $$SELECT get_test_language_name(), i, ('test ' || i) FROM generate_series(1,2) AS i(i)$$
+    $$SELECT language_name
+          , template_id
+          , template_name
+          , template_version
+          , template::text
+        FROM _trunklet.template t
+          JOIN _trunklet.language l USING( language_id )
+        WHERE template_id = ANY( $$ || quote_literal(ids) || $$ )
+      $$
+    , $$SELECT get_test_language_name()
+            , ($$ || quote_literal(ids) || $$::int[])[i] AS template_id
+            , 'test template'::text AS template_name
+            , i AS template_version
+            , ('test ' || i) AS template
+          FROM generate_series(1,2) AS i(i)
+      $$
     , $$Verify template__add results$$
   );
 END

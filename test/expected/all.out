@@ -1,0 +1,31 @@
+\set ECHO none
+ok 1 - threw 22023: field_name must not be NULL
+ok 2 - threw 22023: field_name must not be blank
+ok 3 - threw 22023: field_name must not begin with whitespace
+ok 4 - threw 22023: field_name must not begin with whitespace
+ok 5 - threw 22023: field_name must not end with whitespace
+ok 6 - threw 22023: field_name must not begin with whitespace
+ok 7 - threw 22023: field_name must not begin with whitespace
+ok 8 - threw 22023: field_name must not end with whitespace
+ok 9 - threw 22023: field_name must not begin with whitespace
+ok 10 - threw 22023: field_name must not begin with whitespace
+ok 11 - threw 22023: field_name must not end with whitespace
+ok 12 - Column _trunklet.language.language_name should be type character varying(100)
+ok 13 - Verify CHECK constraint on _trunklet.language.language_name
+ok 14 - c_language_id IS NOT NULL
+ok 15 - (template_name, template_version) should be unique
+ok 16 - Verify CHECK constraint on _trunklet.template.template_name
+ok 17 - Role public should be granted no privileges on function _trunklet.language__get_id(character varying(100))
+ok 18 - threw P0002: language "bogus template language that does not exist" not found
+ok 19 - Verify template__add results
+ok 20 - View trunklet.template_language should exist
+ok 21 - Table trunklet.template_language should have the correct columns
+ok 22 - Role public should be granted no privileges on table trunklet.template_language
+ok 23 - template_language returns same results as _trunklet.language
+ok 24 - threw 22023: language_name must not be NULL
+ok 25 - Verify we can create test language
+ok 26 - Verify type added to registered variant "trunklet_template"
+ok 27 - Verify type added to registered variant "trunklet_parameter"
+ok 28 - Verify type added to registered variant "trunklet_return"
+ok 29 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
+1..29
