@@ -28,6 +28,7 @@ COMMENT ON SCHEMA _trunklet_functions IS $$Schema that contains support function
 CREATE SCHEMA trunklet;
 GRANT USAGE ON SCHEMA trunklet TO public;
 
+-- See also pgtemp.exec_as in test/core/functions.sql
 CREATE OR REPLACE FUNCTION _trunklet.exec(
   sql text
 ) RETURNS void LANGUAGE plpgsql AS $f$
@@ -341,6 +342,71 @@ CREATE OR REPLACE FUNCTION trunklet.template__remove(
   , template_version _trunklet.template.template_version%TYPE DEFAULT 1
 ) RETURNS void SECURITY DEFINER LANGUAGE sql AS $body$
 SELECT trunklet.template__remove( (_trunklet.template__get( $1, $2, $3 )).template_id )
+$body$;
+
+CREATE OR REPLACE FUNCTION trunklet.template__dependency__add(
+  table_name text
+  , field_name name
+) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+  -- Do this to sanitize input
+  o_table CONSTANT regclass := table_name;
+BEGIN
+  PERFORM _trunklet.exec( format( 'ALTER TABLE %s ADD FOREIGN KEY( %I ) REFERENCES _trunklet.template', table_name, field_name ) );
+END
+$body$;
+CREATE OR REPLACE FUNCTION _trunklet.attnum__get(
+  table_name regclass
+  , field_name name
+) RETURNS pg_attribute.attnum%TYPE LANGUAGE plpgsql AS $body$
+DECLARE
+  v_attnum pg_attribute.attnum%TYPE;
+BEGIN
+  SELECT attnum INTO STRICT v_attnum
+    FROM pg_attribute WHERE attrelid = table_name AND attname = field_name
+  ;
+  
+  RETURN v_attnum;
+EXCEPTION
+  WHEN no_data_found THEN
+    RAISE EXCEPTION 'column "%" does not exist', field_name
+      USING ERRCODE = 'undefined_column'
+    ;
+END
+$body$;
+
+CREATE OR REPLACE FUNCTION trunklet.template__dependency__remove(
+  table_name text
+  , field_name name
+) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+  -- Do this to sanitize input
+  o_table CONSTANT regclass := table_name;
+  o_template CONSTANT regclass := '_trunklet.template';
+  v_constraint_name name;
+
+  -- Set these here so we don't accidentally re-trap 
+  v_conkey smallint[] := array[ _trunklet.attnum__get( o_table, field_name ) ];
+  v_confkey smallint[] := array[ _trunklet.attnum__get( o_template, 'template_id' ) ];
+BEGIN
+  BEGIN
+    SELECT conname INTO STRICT v_constraint_name
+      FROM pg_constraint
+      WHERE contype = 'f'
+        AND conrelid = o_table
+        AND confrelid = o_template
+        AND conkey = array[ _trunklet.attnum__get( o_table, field_name ) ]
+        AND confkey = array[ _trunklet.attnum__get( o_template, 'template_id' ) ]
+    ;
+  EXCEPTION
+    WHEN no_data_found THEN
+      RAISE EXCEPTION 'no template dependency on %.%', table_name, field_name
+        USING ERRCODE = 'undefined_object'
+      ;
+  END;
+
+  PERFORM _trunklet.exec( format( 'ALTER TABLE %s DROP CONSTRAINT %I', table_name, v_constraint_name ) );
+END
 $body$;
 
 -- vi: expandtab sw=2 ts=2

@@ -14,18 +14,35 @@ ok 12 - Column _trunklet.language.language_name should be type character varying
 ok 13 - Verify CHECK constraint on _trunklet.language.language_name
 ok 14 - c_language_id IS NOT NULL
 ok 15 - (template_name, template_version) should be unique
-ok 16 - Verify CHECK constraint on _trunklet.template.template_name
-ok 17 - Role public should be granted no privileges on function _trunklet.language__get_id(character varying(100))
-ok 18 - threw P0002: language "bogus template language that does not exist" not found
-ok 19 - Verify template__add results
-ok 20 - View trunklet.template_language should exist
-ok 21 - Table trunklet.template_language should have the correct columns
-ok 22 - Role public should be granted no privileges on table trunklet.template_language
-ok 23 - template_language returns same results as _trunklet.language
-ok 24 - threw 22023: language_name must not be NULL
-ok 25 - Verify we can create test language
-ok 26 - Verify type added to registered variant "trunklet_template"
-ok 27 - Verify type added to registered variant "trunklet_parameter"
-ok 28 - Verify type added to registered variant "trunklet_return"
-ok 29 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
-1..29
+ok 16 - Role public should be granted no privileges on table _trunklet.template
+ok 17 - Role trunklet__dependency should be granted REFERENCES on table _trunklet.template
+ok 18 - Verify CHECK constraint on _trunklet.template.template_name
+ok 19 - Role public should be granted no privileges on function _trunklet.language__get_id(character varying(100))
+ok 20 - threw P0002: language "bogus template language that does not exist" not found
+ok 21 - Verify template__add results
+ok 22 - threw with proper context 42P01: relation "bogus_table" does not exist
+ok 23 - dependency__add: column does not exist
+ok 24 - dependency__add: insufficient privilege
+ok 25 - dependency__add: success
+ok 26 - _trunklet_test.test_dependency(test_template_id) should reference _trunklet.template(template_id)
+ok 27 - dependency__remove: success
+ok 28 - FK does not exist
+ok 29 - dependency__remove: constraint does not exist
+ok 30 - dependency__remove: undefined table
+ok 31 - dependency__remove: column does not exist
+ok 32 - Role public should be granted no privileges on function _trunklet.template__get(character varying(100), text, int)
+ok 33 - threw P0002: language "bogus template language that does not exist" not found
+ok 34 - threw P0002: template with language "Our internal test language", template name "bogus" and version 1 not found
+ok 35 - Test templates removed by name/version
+ok 36 - Test templates removed by id
+ok 37 - View trunklet.template_language should exist
+ok 38 - Table trunklet.template_language should have the correct columns
+ok 39 - Role public should be granted no privileges on table trunklet.template_language
+ok 40 - template_language returns same results as _trunklet.language
+ok 41 - threw 22023: language_name must not be NULL
+ok 42 - Verify we can create test language
+ok 43 - Verify type added to registered variant "trunklet_template"
+ok 44 - Verify type added to registered variant "trunklet_parameter"
+ok 45 - Verify type added to registered variant "trunklet_return"
+ok 46 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
+1..46

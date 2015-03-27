@@ -459,4 +459,139 @@ END
 $body$;
 
 
+/*
+ * FUNCTION trunklet.template__dependency
+ */
+CREATE FUNCTION pg_temp.exec_as(name,text) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+  v_current_role name;
+BEGIN
+  v_current_role := current_role;
+  EXECUTE 'SET ROLE ' || $1;
+  EXECUTE $2;
+  EXECUTE 'SET ROLE ' || v_current_role;
+END
+$body$;
+CREATE FUNCTION test_template__dependency
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  test_table text;
+  test_field name;
+BEGIN
+
+  -- Can't use a temp table because you can't add a FK from a temp table to a non-temp table
+  test_table := '_trunklet_test.test_dependency';
+  test_field := 'test_template_id';
+  DROP TABLE IF EXISTS _trunklet_test.test_dependency;
+  CREATE TABLE _trunklet_test.test_dependency(
+    test_template_id int
+  );
+
+  /*
+   * This ugliness is to verify we get the proper context. We need to do that
+   * to ensure that we're protecting against SQL injection.
+   */
+  DECLARE
+    errcode text := '42P01';
+    errmsg text := 'relation "bogus_table" does not exist';
+    errcontext text := $$\APL/pgSQL function trunklet.template__dependency__add\(text,name\) line \d+ during statement block local variable initialization$$;
+
+    context text;
+    description text := 'threw with proper context ' || errcode || ': ' || errmsg;
+  BEGIN
+    PERFORM trunklet.template__dependency__add( 'bogus_table', test_field );
+    RETURN NEXT ok( FALSE, description ) || E'\n' || diag(
+           '      caught: no exception' ||
+        E'\n      wanted: ' || COALESCE( errcode, 'an exception' )
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS context = PG_EXCEPTION_CONTEXT;
+      IF (errcode IS NULL OR SQLSTATE = errcode)
+        AND ( errmsg IS NULL OR SQLERRM = errmsg)
+        AND context ~ errcontext
+      THEN
+        RETURN NEXT ok( TRUE, description );
+      ELSE
+        RETURN NEXT ok( FALSE, description ) || E'\n' || diag(
+             '      caught: ' || SQLSTATE || ': ' || SQLERRM ||
+          E'\n        context: ' || context ||
+          E'\n      wanted: ' || COALESCE( errcode, 'an exception' ) ||
+          COALESCE( ': ' || errmsg, '') ||
+          E'\n        context: ' || errcontext
+        );
+      END IF;
+  END;
+
+  RETURN NEXT throws_ok(
+    $$SELECT trunklet.template__dependency__add( 'test_dependency', 'bogus_field' )$$
+    , '42703'
+    , NULL
+    , 'dependency__add: column does not exist'
+  );
+
+  DECLARE
+    test_template CONSTANT text :=
+        $test$SELECT pg_temp.exec_as( '_trunklet_test_role', $sql$SELECT trunklet.template__dependency__%s( %L, %L )$sql$ )$test$
+    ;
+  BEGIN
+    DROP ROLE IF EXISTS _trunklet_test_role;
+    CREATE ROLE _trunklet_test_role;
+    GRANT USAGE ON SCHEMA _trunklet_test TO _trunklet_test_role;
+    GRANT USAGE ON SCHEMA _trunklet TO _trunklet_test_role;
+    ALTER TABLE _trunklet_test.test_dependency OWNER TO _trunklet_test_role;
+    RETURN NEXT throws_ok(
+      format( test_template, 'add', test_table, test_field )
+      , '42501'
+      , NULL
+      , 'dependency__add: insufficient privilege'
+    );
+
+    GRANT trunklet__dependency TO _trunklet_test_role;
+    RETURN NEXT lives_ok(
+      format( test_template, 'add', test_table, test_field )
+      , 'dependency__add: success'
+    );
+
+    RETURN NEXT fk_ok(
+      '_trunklet_test', 'test_dependency', test_field
+      , '_trunklet', 'template', 'template_id'
+    );
+
+    RETURN NEXT lives_ok(
+      format( test_template, 'remove', test_table, test_field )
+      , 'dependency__remove: success'
+    );
+
+    RETURN NEXT col_isnt_fk( '_trunklet_test', 'test_dependency', test_field, $$FK does not exist$$ );
+
+    RETURN NEXT throws_ok(
+      format( test_template, 'remove', test_table, test_field )
+      , '42704'
+      , 'no template dependency on ' || test_table || '.' || test_field
+      , 'dependency__remove: constraint does not exist'
+    );
+
+    RETURN NEXT throws_ok(
+      format( test_template, 'remove', test_table || 'XXX', test_field )
+      , '42P01'
+      , NULL
+      , 'dependency__remove: undefined table'
+    );
+
+    RETURN NEXT throws_ok(
+      format( test_template, 'remove', test_table, test_field || 'XXX' )
+      , '42703'
+      , 'column "' || test_field || 'XXX" does not exist'
+      , 'dependency__remove: column does not exist'
+    );
+
+    DROP TABLE _trunklet_test.test_dependency;
+    REVOKE USAGE ON SCHEMA _trunklet_test FROM _trunklet_test_role;
+    REVOKE USAGE ON SCHEMA _trunklet FROM _trunklet_test_role;
+    DROP ROLE IF EXISTS _trunklet_test_role;
+  END;
+END
+$body$;
+
 -- vi: expandtab sw=2 ts=2
