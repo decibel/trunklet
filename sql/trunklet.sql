@@ -9,12 +9,16 @@ SET client_min_messages = warning;
 -- Set a safe search_path
 SET search_path = pg_catalog;
 
+CREATE ROLE trunklet__dependency;
+
 -- Register our variants
 SELECT variant.register( 'trunklet_template', '{}' );
 SELECT variant.register( 'trunklet_parameter', '{}' );
 SELECT variant.register( 'trunklet_return', '{}' );
 
 CREATE SCHEMA _trunklet;
+GRANT USAGE ON SCHEMA _trunklet TO trunklet__dependency;
+COMMENT ON SCHEMA _trunklet IS $$Internal use functions for the trunklet extension.$$;
 
 CREATE SCHEMA _trunklet_functions;
 -- TODO: Create a trunklet__usage role and us it here instead of public
@@ -263,6 +267,7 @@ CREATE TABLE _trunklet.template(
   , template variant.variant(trunklet_template) NOT NULL
   , CONSTRAINT template__u_template_name__template_version UNIQUE( template_name, template_version )
 );
+GRANT REFERENCES ON _trunklet.template TO trunklet__dependency;
 
 CREATE OR REPLACE FUNCTION _trunklet.template__get(
   language_name _trunklet.language.language_name%TYPE
