@@ -21,8 +21,8 @@ GRANT USAGE ON SCHEMA _trunklet TO trunklet__dependency;
 COMMENT ON SCHEMA _trunklet IS $$Internal use functions for the trunklet extension.$$;
 
 CREATE SCHEMA _trunklet_functions;
--- TODO: Create a trunklet__usage role and us it here instead of public
-GRANT USAGE ON SCHEMA _trunklet_functions TO public; -- Languages currently created as extension owner
+-- TODO: Create a trunklet__usage role and use it here instead of public
+GRANT USAGE ON SCHEMA _trunklet_functions TO public; -- Languages currently created as role that calls trunklet.template_language__add()
 COMMENT ON SCHEMA _trunklet_functions IS $$Schema that contains support functions for languages registered in trunklet. Not intended for general use.$$;
 
 CREATE SCHEMA trunklet;
