@@ -400,7 +400,28 @@ CREATE FUNCTION test_template__add
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   ids CONSTANT int[] := get_test_templates();
+  v_array_allowed CONSTANT boolean := 
+    EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_template' ) WHERE allowed_type = 'text[]'::regtype)
+  ;
 BEGIN
+--  RAISE WARNING 'v_array_allowed %', v_array_allowed;
+  IF NOT v_array_allowed THEN
+    PERFORM variant.add_type( 'trunklet_template', 'text[]' );
+  END IF;
+  RETURN NEXT todo( 'Need to implement template type enforcement' );
+  RETURN NEXT throws_ok(
+    $$SELECT trunklet.template__add( get_test_language_name(), 'test_template', 9, '{a,b}'::text[]::variant.variant(trunklet_template) )$$
+    , '12345'
+    , NULL
+    , 'template__add: throw error when given bad template type'
+  );
+  /*
+   * Unfortunately, we can't actually support this right now, because variant doesn't allow for it
+  IF NOT v_array_allowed THEN
+    PERFORM variant.remove_type( 'trunklet_template', 'text[]' );
+  END IF;
+   */
+
   RETURN NEXT bag_eq(
     -- Need to cast variant to text because it doesn't have an equality operator family
     $$SELECT language_name

@@ -19,30 +19,35 @@ ok 17 - Role trunklet__dependency should be granted REFERENCES on table _trunkle
 ok 18 - Verify CHECK constraint on _trunklet.template.template_name
 ok 19 - Role public should be granted no privileges on function _trunklet.language__get_id(character varying(100))
 ok 20 - threw P0002: language "bogus template language that does not exist" not found
-ok 21 - Verify template__add results
-ok 22 - threw with proper context 42P01: relation "bogus_table" does not exist
-ok 23 - dependency__add: column does not exist
-ok 24 - dependency__add: insufficient privilege
-ok 25 - dependency__add: success
-ok 26 - _trunklet_test.test_dependency(test_template_id) should reference _trunklet.template(template_id)
-ok 27 - dependency__remove: success
-ok 28 - FK does not exist
-ok 29 - dependency__remove: constraint does not exist
-ok 30 - dependency__remove: undefined table
-ok 31 - dependency__remove: column does not exist
-ok 32 - Role public should be granted no privileges on function _trunklet.template__get(character varying(100), text, int)
-ok 33 - threw P0002: language "bogus template language that does not exist" not found
-ok 34 - threw P0002: template with language "Our internal test language", template name "bogus" and version 1 not found
-ok 35 - Test templates removed by name/version
-ok 36 - Test templates removed by id
-ok 37 - View trunklet.template_language should exist
-ok 38 - Table trunklet.template_language should have the correct columns
-ok 39 - Role public should be granted no privileges on table trunklet.template_language
-ok 40 - template_language returns same results as _trunklet.language
-ok 41 - threw 22023: language_name must not be NULL
-ok 42 - Verify we can create test language
-ok 43 - Verify type added to registered variant "trunklet_template"
-ok 44 - Verify type added to registered variant "trunklet_parameter"
-ok 45 - Verify type added to registered variant "trunklet_return"
-ok 46 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
-1..46
+
+not ok 21 - template__add: throw error when given bad template type # TODO Need to implement template type enforcement
+# Failed (TODO) test 21: "template__add: throw error when given bad template type"
+#       caught: no exception
+#       wanted: 12345
+ok 22 - Verify template__add results
+ok 23 - threw with proper context 42P01: relation "bogus_table" does not exist
+ok 24 - dependency__add: column does not exist
+ok 25 - dependency__add: insufficient privilege
+ok 26 - dependency__add: success
+ok 27 - _trunklet_test.test_dependency(test_template_id) should reference _trunklet.template(template_id)
+ok 28 - dependency__remove: success
+ok 29 - FK does not exist
+ok 30 - dependency__remove: constraint does not exist
+ok 31 - dependency__remove: undefined table
+ok 32 - dependency__remove: column does not exist
+ok 33 - Role public should be granted no privileges on function _trunklet.template__get(character varying(100), text, int)
+ok 34 - threw P0002: language "bogus template language that does not exist" not found
+ok 35 - threw P0002: template with language "Our internal test language", template name "bogus" and version 1 not found
+ok 36 - Test templates removed by name/version
+ok 37 - Test templates removed by id
+ok 38 - View trunklet.template_language should exist
+ok 39 - Table trunklet.template_language should have the correct columns
+ok 40 - Role public should be granted no privileges on table trunklet.template_language
+ok 41 - template_language returns same results as _trunklet.language
+ok 42 - threw 22023: language_name must not be NULL
+ok 43 - Verify we can create test language
+ok 44 - Verify type added to registered variant "trunklet_template"
+ok 45 - Verify type added to registered variant "trunklet_parameter"
+ok 46 - Verify type added to registered variant "trunklet_return"
+ok 47 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
+1..47
