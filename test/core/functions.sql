@@ -293,6 +293,17 @@ BEGIN
     , '(template_name, template_version) should be unique'
   );
 
+  RETURN NEXT table_privs_are(
+    c_schema, c_name
+    , 'public'
+    , NULL::text[]
+  );
+  RETURN NEXT table_privs_are(
+    c_schema, c_name
+    , 'trunklet__dependency'
+    , '{REFERENCES}'::text[]
+  );
+
   RETURN NEXT throws_ok(
     format(
       $$INSERT INTO %I.%I(
