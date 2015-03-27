@@ -17,6 +17,38 @@ $body$;
 */
 
 /*
+ * schemas
+ */
+CREATE FUNCTION test_schemas
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  RETURN NEXT schema_privs_are(
+    'trunklet'
+    , 'public'
+    , array[ 'USAGE' ]
+  );
+
+  RETURN NEXT schema_privs_are(
+    '_trunklet'
+    , 'public'
+    , array[ NULL ]
+  );
+  RETURN NEXT schema_privs_are(
+    '_trunklet'
+    , 'trunklet__dependency'
+    , array[ 'USAGE' ]
+  );
+
+  RETURN NEXT schema_privs_are(
+    '_trunklet_functions'
+    , 'public'
+    , array[ 'USAGE' ]
+  );
+END
+$body$;
+
+/*
  * _trunklet.name_sanity()
  */
 CREATE FUNCTION run__name_sanity(
