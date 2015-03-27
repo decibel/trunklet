@@ -378,12 +378,13 @@ CREATE FUNCTION get_test_templates(
 DECLARE
   ids int[];
 BEGIN
+  -- Do this even if the test_templates table already exists
+  PERFORM get_test_language_id();
+
   BEGIN
     SELECT ids INTO ids FROM test_templates;
   EXCEPTION
     WHEN undefined_table THEN
-      PERFORM get_test_language_id();
-
       ids[1] := trunklet.template__add( get_test_language_name(), 'test template', text_to_trunklet_template('test 1') );
       ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, text_to_trunklet_template('test 2') );
 
