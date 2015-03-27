@@ -6,6 +6,9 @@
 
 SET client_min_messages = warning;
 
+-- Set a safe search_path
+SET search_path = pg_catalog;
+
 -- Register our variants
 SELECT variant.register( 'trunklet_template', '{}' );
 SELECT variant.register( 'trunklet_parameter', '{}' );
