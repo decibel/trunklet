@@ -153,12 +153,22 @@ BEGIN
   BEGIN
   PERFORM trunklet.template_language__add(
       get_test_language_name()
-      , 'text[][]'
-      , 'text'
-      , 'LANGUAGE sql'
-      , $$SELECT ''::text$$
-      , 'LANGUAGE sql'
-      , $$SELECT ''::text::variant.variant$$
+      , parameter_type := 'text[]'
+      , template_type := 'text'
+      , process_function_options := 'LANGUAGE plpgsql'
+      , process_function_body := $process$
+DECLARE
+  v_args CONSTANT text := array_to_string( array( SELECT ', ' || quote_nullable(a) FROM unnest(parameters::text[]) a(a) ), '' );
+  sql CONSTANT text := format( 'SELECT format( %L%s )', template::text, v_args );
+  v_return text;
+BEGIN
+  RAISE DEBUG 'EXECUTE INTO using sql %', sql;
+  EXECUTE sql INTO v_return;
+  RETURN v_return;
+END
+$process$
+      , extract_parameters_options := 'LANGUAGE sql'
+      , extract_parameters_body := $extract$SELECT ''::text::variant.variant$extract$
     );
   EXCEPTION
     -- TODO: incorrect return value
@@ -248,7 +258,7 @@ $body$;
 -- NOTE: These default values won't actually work
 CREATE FUNCTION run_template_language__add(
   text
-  , text = $$text[][]$$
+  , text = $$text[]$$
   , text = $$text$$
   , text = $$LANGUAGE sql$$
   , text = $$SELECT ''$$
@@ -406,9 +416,12 @@ $body$;
  * cast text to variant during function compilation, before get_test_language_id
  * has allowed text as a type for that variant.
  */
-CREATE FUNCTION text_to_trunklet_template(
-  text
+CREATE FUNCTION any_to_trunklet_template(
+  anyelement
 ) RETURNS variant.variant(trunklet_template) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_template); END$$;
+CREATE FUNCTION any_to_trunklet_parameter(
+  anyelement
+) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_parameter); END$$;
 CREATE FUNCTION get_test_templates(
 ) RETURNS int[] LANGUAGE plpgsql AS $body$
 DECLARE
@@ -421,8 +434,8 @@ BEGIN
     SELECT ids INTO ids FROM test_templates;
   EXCEPTION
     WHEN undefined_table THEN
-      ids[1] := trunklet.template__add( get_test_language_name(), 'test template', text_to_trunklet_template('test 1') );
-      ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, text_to_trunklet_template('test 2') );
+      ids[1] := trunklet.template__add( get_test_language_name(), 'test template', any_to_trunklet_template('test 1'::text) );
+      ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, any_to_trunklet_template('test 2'::text) );
 
       -- See also test_template__remove
       CREATE TEMP TABLE test_templates AS VALUES(ids);
@@ -651,5 +664,76 @@ BEGIN
   END;
 END
 $body$;
+
+
+
+/*
+ * FUNCTION trunklet.process
+ */
+CREATE FUNCTION test_process
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  lname CONSTANT text := get_test_language_name();
+  test CONSTANT text := $$SELECT trunklet.process( %L, %L, %L )$$;
+  p CONSTANT text := 'trunklet.process(): ';
+BEGIN
+  PERFORM get_test_language_id();
+  PERFORM variant.add_type( 'trunklet_template', 'varchar' );
+  PERFORM variant.add_type( 'trunklet_parameter', 'text' );
+
+  -- TODO: get rid of this hackery
+  UPDATE _variant._registered SET variant_enabled = TRUE WHERE variant_name = 'DEFAULT';
+  PERFORM variant.add_types( 'DEFAULT', '{varchar,text,text[]}' );
+  RETURN NEXT throws_ok(
+    format( test, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
+    , 'P0002'
+    , 'language "bogus template language that does not exist" not found'
+    , p || 'invalid language'
+  );
+
+  RETURN NEXT throws_ok(
+    format( test, lname, any_to_trunklet_template('%s'::varchar), any_to_trunklet_parameter('{a}'::text[]) )
+    , '22000'
+    , 'templates for language "Our internal test language" must by of type "text"'
+    , p || 'invalid template'
+  );
+
+  RETURN NEXT throws_ok(
+    format( test, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text) )
+    , '22000'
+    , 'parameters for language "Our internal test language" must by of type "text[]"'
+    , p || 'invalid parameter'
+  );
+  UPDATE _variant._registered SET variant_enabled = FALSE WHERE variant_name = 'DEFAULT';
+
+  /*
+  RETURN QUERY SELECT row(oid::regprocedure, prorettype::regtype, prosrc)::text
+    FROM pg_proc
+    WHERE pronamespace = (SELECT oid FROM pg_namespace WHERE nspname='_trunklet_functions')
+  ;
+  */
+  CREATE TEMP VIEW test AS SELECT * FROM (VALUES
+        ( '%s'::text,   '{a}'::text[],  'a'::text )
+      , ( '%s %s',      '{a,b}',        'a b' )
+      , ( '%s %s',      '{a,NULL}',     'a ' )
+      , ( '%s',         '{NULL}',       '' )
+      , ( 'moo',        NULL,           'moo' )
+    ) a(template, parameters, expected)
+  ;
+  RETURN QUERY
+    SELECT is(
+          /*
+           * REMEMBER: the test language is actually just format, so first argument
+           * here is a format string itself, second is an array of text values.
+           */
+          trunklet.process( lname, any_to_trunklet_template(template), any_to_trunklet_parameter(parameters) )
+          , expected
+          , format( 'trunklet.process( ..., %L, %L )', template, parameters )
+        )
+      FROM test
+  ;
+END
+$body$;
+
 
 -- vi: expandtab sw=2 ts=2

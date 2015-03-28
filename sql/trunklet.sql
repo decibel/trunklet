@@ -100,6 +100,22 @@ SELECT (_trunklet.language__get( $1 )).language_id
 $body$;
 
 
+CREAtE OR REPLACE FUNCTION _trunklet.verify_type(
+  language_name _trunklet.language.language_name%TYPE
+  , allowed_type regtype
+  , supplied_type regtype
+  , which_type text
+) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  IF supplied_type <> allowed_type THEN
+    RAISE EXCEPTION '%s for language "%" must by of type "%"', which_type, language_name, allowed_type
+      USING ERRCODE = 'data_exception'
+    ;
+  END IF;
+END
+$body$;
+
 CREATE OR REPLACE FUNCTION _trunklet.function_name(
   language_id _trunklet.language.language_id%TYPE
   , function_type text
@@ -130,7 +146,7 @@ DECLARE
     -- Name template
     $name$_trunklet_functions.%1$s(
     template variant.variant(trunklet_template)
-    , parameters variant.variant(trunklet_parameter)[]
+    , parameters variant.variant(trunklet_parameter)
   )
     $name$
     , func_name
@@ -418,5 +434,37 @@ BEGIN
   PERFORM _trunklet.exec( format( 'ALTER TABLE %s DROP CONSTRAINT %I', table_name, v_constraint_name ) );
 END
 $body$;
+
+CREATE OR REPLACE FUNCTION trunklet.process(
+  language_name _trunklet.language.language_name%TYPE
+  /*
+  , template anyelement
+  , parameters anyelement
+  */
+  , template variant.variant(trunklet_template)
+  , parameters variant.variant(trunklet_parameter)
+) RETURNS text LANGUAGE plpgsql AS $body$
+DECLARE
+  v_language _trunklet.language;
+  sql text;
+  v_return text;
+BEGIN
+  -- Can't do this during DECLARE
+  v_language := _trunklet.language__get( language_name );
+
+  PERFORM _trunklet.verify_type( language_name, v_language.template_type, variant.original_regtype(template), 'template' );
+  PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_regtype(parameters), 'parameter' );
+
+  sql := format(
+    'SELECT _trunklet_functions.%s( $1, $2 )'
+    , _trunklet.function_name( v_language.language_id, 'process' )
+  );
+  EXECUTE sql INTO STRICT v_return USING template, parameters;
+  RAISE DEBUG '% returned %', sql, v_return;
+
+  RETURN v_return;
+END
+$body$;
+
 
 -- vi: expandtab sw=2 ts=2
