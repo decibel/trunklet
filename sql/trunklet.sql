@@ -100,23 +100,32 @@ SELECT (_trunklet.language__get( $1 )).language_id
 $body$;
 
 
+CREATE OR REPLACE FUNCTION _trunklet.function_name(
+  language_id _trunklet.language.language_id%TYPE
+  , function_type text
+) RETURNS text IMMUTABLE LANGUAGE sql AS $body$
+SELECT format(
+  'language_id_%s__%s'
+  -- text version of language_id that is 0 padded. btrim shouldn't be necessary but is.
+  , btrim( to_char(
+      language_id
+      -- Get a string of 0's long enough to hold a max-sized int
+      , repeat( '0', length( (2^31-1)::int::text ) )
+    ) )
+  , function_type
+);
+$body$;
+
 CREATE OR REPLACE FUNCTION _trunklet.create_language_function(
   language_id _trunklet.language.language_id%TYPE
-  , language_name text
+  , language_name _trunklet.language.language_name%TYPE
   , return_type text
   , function_options text
   , function_body text
   , function_type text
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
-  -- text version of language_id that is 0 padded. btrim shouldn't be necessary but is.
-  formatted_id CONSTANT text := btrim( to_char(
-    language_id
-    -- Get a string of 0's long enough to hold a max-sized int
-    , repeat( '0', length( (2^31-1)::int::text ) )
-  ) );
-
-  func_name CONSTANT text := format( 'language_id_%s__%s', formatted_id, function_type );
+  func_name CONSTANT text := _trunklet.function_name( language_id, function_type );
   func_full_name CONSTANT text := format(
     -- Name template
     $name$_trunklet_functions.%1$s(
