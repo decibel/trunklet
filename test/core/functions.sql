@@ -176,17 +176,21 @@ CREATE FUNCTION test_language__get_id
 --\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
+  p CONSTANT text := 'language__get_id: ';
+  v_id CONSTANT int := get_test_language_id();
+  template CONSTANT text := $$SELECT _trunklet.language__get_id( %L )$$;
 BEGIN
-  RETURN NEXT function_privs_are(
-    '_trunklet', 'language__get_id'
-    , ('{' || language_name_type() || '}')::text[]
-    , 'public', NULL::text[]
+  RETURN NEXT is(
+    _trunklet.language__get_id( get_test_language_name() )
+    , v_id
+    , p || 'returns correct id'
   );
 
   RETURN NEXT throws_ok(
-    format( $$SELECT _trunklet.language__get_id( %L )$$, bogus_language_name() )
+    format( template, bogus_language_name() )
     , 'P0002'
     , format( $$language "%s" not found$$, bogus_language_name() )
+    , p || 'throws language not found'
   );
 END
 $body$;

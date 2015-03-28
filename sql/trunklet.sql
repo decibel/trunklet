@@ -75,18 +75,17 @@ CREATE TABLE _trunklet.language(
 COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used to pass parameters to templates in this language.$$;
 COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used by templates in this language.$$;
 -- TODO: Add AFTER UPDATE trigger to re-validate the type of all stored templates for a language if template_type changes
-CREATE OR REPLACE FUNCTION _trunklet.language__get_id(
+CREATE OR REPLACE FUNCTION _trunklet.language__get(
   language_name _trunklet.language.language_name%TYPE
-) RETURNS _trunklet.language.language_id%TYPE LANGUAGE plpgsql AS $body$
+) RETURNS _trunklet.language STABLE LANGUAGE plpgsql AS $body$
 DECLARE
-  v_id _trunklet.language.language_id%TYPE;
+  v_return _trunklet.language;
 BEGIN
-  SELECT INTO STRICT v_id
-      language_id
+  SELECT * INTO STRICT v_return
     FROM _trunklet.language l
-    WHERE l.language_name = language__get_id.language_name
+    WHERE l.language_name = language__get.language_name
   ;
-  RETURN v_id;
+  RETURN v_return;
 EXCEPTION
   WHEN no_data_found THEN
     RAISE EXCEPTION 'language "%" not found', language_name
@@ -94,9 +93,11 @@ EXCEPTION
     ;
 END
 $body$;
-REVOKE ALL ON FUNCTION _trunklet.language__get_id(
+CREATE OR REPLACE FUNCTION _trunklet.language__get_id(
   language_name _trunklet.language.language_name%TYPE
-) FROM public;
+) RETURNS _trunklet.language.language_id%TYPE STABLE LANGUAGE sql AS $body$
+SELECT (_trunklet.language__get( $1 )).language_id
+$body$;
 
 
 CREATE OR REPLACE FUNCTION _trunklet.create_language_function(
