@@ -31,13 +31,22 @@ endif
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
+# Don't have installcheck bomb on error
+.IGNORE: installcheck
+
+.PHONY: test
+test: clean install installcheck
+	@if [ -r regression.diffs ]; then cat regression.diffs; fi
+
 .PHONY: results
-results:
-	rsync -avP --delete results/ test/expected
+results: test
+	rsync -rlpgovP results/ test/expected
+
+tag:
+	git branch $(EXTVERSION)
+	git push --set-upstream origin $(EXTVERSION)
 
 dist:
-	git branch --set-upstream origin --track $(EXTVERSION)
-	git push origin $(EXTVERSION)
 	git archive --prefix=$(EXTENSION)-$(EXTVERSION)/ -o $(EXTENSION)-$(EXTVERSION).zip HEAD
 
 # To use this, do make print-VARIABLE_NAME
