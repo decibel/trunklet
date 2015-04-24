@@ -12,7 +12,7 @@ SET search_path = pg_catalog;
 CREATE ROLE trunklet__dependency;
 
 -- Register our variants
-SELECT variant.register( 'trunklet_template', '{}' );
+SELECT variant.register( 'trunklet_template', '{}', true );
 SELECT variant.register( 'trunklet_parameter', '{}' );
 SELECT variant.register( 'trunklet_return', '{}' );
 
@@ -452,8 +452,8 @@ BEGIN
   -- Can't do this during DECLARE
   v_language := _trunklet.language__get( language_name );
 
-  PERFORM _trunklet.verify_type( language_name, v_language.template_type, variant.original_regtype(template), 'template' );
-  PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_regtype(parameters), 'parameter' );
+  PERFORM _trunklet.verify_type( language_name, v_language.template_type, variant.original_type(template), 'template' );
+  PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_type(parameters), 'parameter' );
 
   sql := format(
     'SELECT _trunklet_functions.%s( $1, $2 )'

@@ -681,9 +681,6 @@ BEGIN
   PERFORM variant.add_type( 'trunklet_template', 'varchar' );
   PERFORM variant.add_type( 'trunklet_parameter', 'text' );
 
-  -- TODO: get rid of this hackery
-  UPDATE _variant._registered SET variant_enabled = TRUE WHERE variant_name = 'DEFAULT';
-  PERFORM variant.add_types( 'DEFAULT', '{varchar,text,text[]}' );
   RETURN NEXT throws_ok(
     format( test, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
     , 'P0002'
@@ -704,7 +701,6 @@ BEGIN
     , 'parameters for language "Our internal test language" must by of type "text[]"'
     , p || 'invalid parameter'
   );
-  UPDATE _variant._registered SET variant_enabled = FALSE WHERE variant_name = 'DEFAULT';
 
   /*
   RETURN QUERY SELECT row(oid::regprocedure, prorettype::regtype, prosrc)::text
