@@ -378,36 +378,6 @@ END
 $body$;
 
 /*
- * FUNCTION _trunklet.template__get
- */
-CREATE FUNCTION test_template__get
---\i test/helpers/f1.sql
-() RETURNS SETOF text LANGUAGE plpgsql AS $body$
-DECLARE
-BEGIN
-  RETURN NEXT function_privs_are(
-    '_trunklet', 'template__get'
-    , ('{' || language_name_type() || ', text, int}')::text[]
-    , 'public', NULL::text[]
-  );
-
-  RETURN NEXT throws_ok(
-    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, bogus_language_name() )
-    , 'P0002'
-    , format( $$language "%s" not found$$, bogus_language_name() )
-  );
-
-  PERFORM get_test_language_id();
-  RETURN NEXT throws_ok(
-    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, get_test_language_name() )
-    , 'P0002'
-    , format( $$template with language "%s", template name "bogus" and version 1 not found$$, get_test_language_name() )
-  );
-END
-$body$;
-
-
-/*
  * FUNCTION trunklet.template__add
  */
 
@@ -490,6 +460,36 @@ BEGIN
           FROM generate_series(1,2) AS i(i)
       $$
     , $$Verify template__add results$$
+  );
+END
+$body$;
+
+
+/*
+ * FUNCTION _trunklet.template__get
+ */
+CREATE FUNCTION test_template__get
+--\i test/helpers/f1.sql
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  RETURN NEXT function_privs_are(
+    '_trunklet', 'template__get'
+    , ('{' || language_name_type() || ', text, int}')::text[]
+    , 'public', NULL::text[]
+  );
+
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, bogus_language_name() )
+    , 'P0002'
+    , format( $$language "%s" not found$$, bogus_language_name() )
+  );
+
+  PERFORM get_test_language_id();
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, get_test_language_name() )
+    , 'P0002'
+    , format( $$template with language "%s", template name "bogus" and version 1 not found$$, get_test_language_name() )
   );
 END
 $body$;
