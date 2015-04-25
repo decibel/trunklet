@@ -96,6 +96,15 @@ RETURNS TEXT AS $$
     SELECT ok( _rexists( 'r', $1, $2 ), $3 );
 $$ LANGUAGE SQL;
 
+-- has_table( schema, table )
+CREATE OR REPLACE FUNCTION has_table ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        _rexists( 'r', $1, $2 ),
+        'Table ' || quote_ident($1) || '.' || quote_ident($2) || ' should exist'
+    );
+$$ LANGUAGE SQL;
+
 -- has_table( table, description )
 CREATE OR REPLACE FUNCTION has_table ( NAME, TEXT )
 RETURNS TEXT AS $$
@@ -112,6 +121,15 @@ $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION hasnt_table ( NAME, NAME, TEXT )
 RETURNS TEXT AS $$
     SELECT ok( NOT _rexists( 'r', $1, $2 ), $3 );
+$$ LANGUAGE SQL;
+
+-- hasnt_table( schema, table )
+CREATE OR REPLACE FUNCTION hasnt_table ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        NOT _rexists( 'r', $1, $2 ),
+        'Table ' || quote_ident($1) || '.' || quote_ident($2) || ' should not exist'
+    );
 $$ LANGUAGE SQL;
 
 -- hasnt_table( table, description )
@@ -168,6 +186,15 @@ RETURNS TEXT AS $$
     SELECT ok( _rexists( 'S', $1, $2 ), $3 );
 $$ LANGUAGE SQL;
 
+-- has_sequence( schema, sequence )
+CREATE OR REPLACE FUNCTION has_sequence ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        _rexists( 'S', $1, $2 ),
+        'Sequence ' || quote_ident($1) || '.' || quote_ident($2) || ' should exist'
+    );
+$$ LANGUAGE SQL;
+
 -- has_sequence( sequence, description )
 CREATE OR REPLACE FUNCTION has_sequence ( NAME, TEXT )
 RETURNS TEXT AS $$
@@ -204,6 +231,15 @@ RETURNS TEXT AS $$
     SELECT ok( _rexists( 'f', $1, $2 ), $3 );
 $$ LANGUAGE SQL;
 
+-- has_foreign_table( schema, table )
+CREATE OR REPLACE FUNCTION has_foreign_table ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        _rexists( 'f', $1, $2 ),
+        'Foreign table ' || quote_ident($1) || '.' || quote_ident($2) || ' should exist'
+    );
+$$ LANGUAGE SQL;
+
 -- has_foreign_table( table, description )
 CREATE OR REPLACE FUNCTION has_foreign_table ( NAME, TEXT )
 RETURNS TEXT AS $$
@@ -220,6 +256,15 @@ $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION hasnt_foreign_table ( NAME, NAME, TEXT )
 RETURNS TEXT AS $$
     SELECT ok( NOT _rexists( 'f', $1, $2 ), $3 );
+$$ LANGUAGE SQL;
+
+-- hasnt_foreign_table( schema, table )
+CREATE OR REPLACE FUNCTION hasnt_foreign_table ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        NOT _rexists( 'f', $1, $2 ),
+        'Foreign table ' || quote_ident($1) || '.' || quote_ident($2) || ' should not exist'
+    );
 $$ LANGUAGE SQL;
 
 -- hasnt_foreign_table( table, description )
@@ -1310,6 +1355,18 @@ RETURNS TEXT AS $$
     SELECT _constraint( $1, $2, 'u', $3, $4, 'unique' );
 $$ LANGUAGE sql;
 
+-- col_is_unique( schema, table, column[] )
+CREATE OR REPLACE FUNCTION col_is_unique ( NAME, NAME, NAME[] )
+RETURNS TEXT AS $$
+    SELECT col_is_unique( $1, $2, $3, 'Columns ' || quote_ident($2) || '(' || _ident_array_to_string($3, ', ') || ') should have a unique constraint' );
+$$ LANGUAGE sql;
+
+-- col_is_unique( scheam, table, column )
+CREATE OR REPLACE FUNCTION col_is_unique ( NAME, NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT col_is_unique( $1, $2, ARRAY[$3], 'Column ' || quote_ident($2) || '(' || quote_ident($3) || ') should have a unique constraint' );
+$$ LANGUAGE sql;
+
 -- col_is_unique( table, column, description )
 CREATE OR REPLACE FUNCTION col_is_unique ( NAME, NAME[], TEXT )
 RETURNS TEXT AS $$
@@ -2375,7 +2432,7 @@ RETURNS oid[] AS $$
     );
 $$ LANGUAGE sql;
 
--- is_member_of( role, role[], description )
+-- is_member_of( role, members[], description )
 CREATE OR REPLACE FUNCTION is_member_of( NAME, NAME[], TEXT )
 RETURNS TEXT AS $$
 DECLARE
@@ -2399,25 +2456,25 @@ BEGIN
         RETURN ok( true, $3 );
     END IF;
     RETURN ok( false, $3 ) || E'\n' || diag(
-        '    Users missing from the ' || quote_ident($1) || E' role:\n        ' ||
+        '    Members missing from the ' || quote_ident($1) || E' role:\n        ' ||
         array_to_string( missing, E'\n        ')
     );
 END;
 $$ LANGUAGE plpgsql;
 
--- is_member_of( role, role, description )
+-- is_member_of( role, member, description )
 CREATE OR REPLACE FUNCTION is_member_of( NAME, NAME, TEXT )
 RETURNS TEXT AS $$
     SELECT is_member_of( $1, ARRAY[$2], $3 );
 $$ LANGUAGE SQL;
 
--- is_member_of( role, role[] )
+-- is_member_of( role, members[] )
 CREATE OR REPLACE FUNCTION is_member_of( NAME, NAME[] )
 RETURNS TEXT AS $$
     SELECT is_member_of( $1, $2, 'Should have members of role ' || quote_ident($1) );
 $$ LANGUAGE SQL;
 
--- is_member_of( role, role )
+-- is_member_of( role, member )
 CREATE OR REPLACE FUNCTION is_member_of( NAME, NAME )
 RETURNS TEXT AS $$
     SELECT is_member_of( $1, ARRAY[$2] );
@@ -2538,7 +2595,7 @@ RETURNS NAME[] AS $$
          WHERE pg_catalog.pg_table_is_visible(c.oid)
            AND n.nspname <> 'pg_catalog'
            AND c.relkind = $1
-           AND c.relname NOT IN ('__tcache__', '__tresults__', 'pg_all_foreign_keys', 'tap_funky', '__tresults___numb_seq', '__tcache___id_seq')
+           AND c.relname NOT IN ('__tcache__', 'pg_all_foreign_keys', 'tap_funky', '__tresults___numb_seq', '__tcache___id_seq')
         EXCEPT
         SELECT $2[i]
           FROM generate_series(1, array_upper($2, 1)) s(i)
@@ -3255,12 +3312,12 @@ BEGIN
     tnumb := currval('__tresults___numb_seq');
 
     -- Fetch the results.
-    EXECUTE 'SELECT aok, descr FROM __tresults__ WHERE numb = ' || tnumb
-       INTO aok, adescr;
+    aok    := substring(have, 1, 2) = 'ok';
+    adescr := COALESCE(substring(have FROM  E'(?:not )?ok [[:digit:]]+ - ([^\n]+)'), '');
 
     -- Now delete those results.
-    EXECUTE 'DELETE FROM __tresults__ WHERE numb = ' || tnumb;
     EXECUTE 'ALTER SEQUENCE __tresults___numb_seq RESTART WITH ' || tnumb;
+    IF NOT aok THEN PERFORM _set('failed', _get('failed') - 1); END IF;
 
     -- Set up the description.
     descr := coalesce( name || ' ', 'Test ' ) || 'should ';
@@ -3291,16 +3348,22 @@ BEGIN
 
         -- Remove the description, if there is one.
         IF adescr <> '' THEN
-            adiag := substring( adiag FROM 3 + char_length( diag( adescr ) ) );
+            adiag := substring(
+                adiag FROM 1 + char_length( ' - ' || substr(diag( adescr ), 3) )
+            );
         END IF;
 
-        -- Remove failure message from ok().
         IF NOT aok THEN
-           adiag := substring(
-               adiag
-               FROM 14 + char_length(tnumb::text)
-                       + CASE adescr WHEN '' THEN 3 ELSE 3 + char_length( diag( adescr ) ) END
-           );
+            -- Remove failure message from ok().
+            adiag := substring(adiag FROM 1 + char_length(diag(
+                'Failed test ' || tnumb ||
+                CASE adescr WHEN '' THEN '' ELSE COALESCE(': "' || adescr || '"', '') END
+            )));
+        END IF;
+
+        IF ediag <> '' THEN
+           -- Remove the space before the diagnostics.
+           adiag := substring(adiag FROM 2);
         END IF;
 
         -- Remove the #s.
@@ -3350,11 +3413,6 @@ CREATE OR REPLACE FUNCTION check_test( TEXT, BOOLEAN )
 RETURNS SETOF TEXT AS $$
     SELECT * FROM check_test( $1, $2, NULL, NULL, NULL, FALSE );
 $$ LANGUAGE sql;
-
-CREATE OR REPLACE FUNCTION diag_test_name(TEXT)
-RETURNS TEXT AS $$
-    SELECT diag($1 || '()');
-$$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION isnt_empty( TEXT, TEXT )
 RETURNS TEXT AS $$
@@ -5419,3 +5477,155 @@ RETURNS TEXT AS $$
             || ' on server ' || quote_ident($1)
     );
 $$ LANGUAGE SQL;
+
+-- materialized_views_are( schema, materialized_views, description )
+CREATE OR REPLACE FUNCTION materialized_views_are ( NAME, NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _are( 'Materialized views', _extras('m', $1, $2), _missing('m', $1, $2), $3);
+$$ LANGUAGE SQL;
+
+-- materialized_views_are( materialized_views, description )
+CREATE OR REPLACE FUNCTION materialized_views_are ( NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _are( 'Materialized views', _extras('m', $1), _missing('m', $1), $2);
+$$ LANGUAGE SQL;
+
+-- materialized_views_are( schema, materialized_views )
+CREATE OR REPLACE FUNCTION materialized_views_are ( NAME, NAME[] )
+RETURNS TEXT AS $$
+    SELECT _are(
+        'Materialized views', _extras('m', $1, $2), _missing('m', $1, $2),
+        'Schema ' || quote_ident($1) || ' should have the correct materialized views'
+    );
+$$ LANGUAGE SQL;
+
+-- materialized_views_are( materialized_views )
+CREATE OR REPLACE FUNCTION materialized_views_are ( NAME[] )
+RETURNS TEXT AS $$
+    SELECT _are(
+        'Materialized views', _extras('m', $1), _missing('m', $1),
+        'Search path ' || pg_catalog.current_setting('search_path') || ' should have the correct materialized views'
+    );
+$$ LANGUAGE SQL;
+
+-- materialized_view_owner_is ( schema, materialized_view, user, description )
+CREATE OR REPLACE FUNCTION materialized_view_owner_is ( NAME, NAME, NAME, TEXT )
+RETURNS TEXT AS $$
+DECLARE
+    owner NAME := _get_rel_owner('m'::char, $1, $2);
+BEGIN
+    -- Make sure the materialized view exists.
+    IF owner IS NULL THEN
+        RETURN ok(FALSE, $4) || E'\n' || diag(
+            E'    Materialized view ' || quote_ident($1) || '.' || quote_ident($2) || ' does not exist'
+        );
+    END IF;
+
+    RETURN is(owner, $3, $4);
+END;
+$$ LANGUAGE plpgsql;
+
+-- materialized_view_owner_is ( schema, materialized_view, user )
+CREATE OR REPLACE FUNCTION materialized_view_owner_is ( NAME, NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT materialized_view_owner_is(
+        $1, $2, $3,
+        'Materialized view ' || quote_ident($1) || '.' || quote_ident($2) || ' should be owned by ' || quote_ident($3)
+    );
+$$ LANGUAGE sql;
+
+-- materialized_view_owner_is ( materialized_view, user, description )
+CREATE OR REPLACE FUNCTION materialized_view_owner_is ( NAME, NAME, TEXT )
+RETURNS TEXT AS $$
+DECLARE
+    owner NAME := _get_rel_owner('m'::char, $1);
+BEGIN
+    -- Make sure the materialized view exists.
+    IF owner IS NULL THEN
+        RETURN ok(FALSE, $3) || E'\n' || diag(
+            E'    Materialized view ' || quote_ident($1) || ' does not exist'
+        );
+    END IF;
+
+    RETURN is(owner, $2, $3);
+END;
+$$ LANGUAGE plpgsql;
+
+-- materialized_view_owner_is ( materialized_view, user )
+CREATE OR REPLACE FUNCTION materialized_view_owner_is ( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT materialized_view_owner_is(
+        $1, $2,
+        'Materialized view ' || quote_ident($1) || ' should be owned by ' || quote_ident($2)
+    );
+$$ LANGUAGE sql;
+
+-- has_materialized_view( schema, materialized_view, description )
+CREATE OR REPLACE FUNCTION has_materialized_view ( NAME, NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT ok( _rexists( 'm', $1, $2 ), $3 );
+$$ LANGUAGE SQL;
+
+-- has_materialized_view( materialized_view, description )
+CREATE OR REPLACE FUNCTION has_materialized_view ( NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT ok( _rexists( 'm', $1 ), $2 );
+$$ LANGUAGE SQL;
+
+-- has_materialized_view( materialized_view )
+CREATE OR REPLACE FUNCTION has_materialized_view ( NAME )
+RETURNS TEXT AS $$
+    SELECT has_materialized_view( $1, 'Materialized view ' || quote_ident($1) || ' should exist' );
+$$ LANGUAGE SQL;
+
+-- hasnt_materialized_view( schema, materialized_view, description )
+CREATE OR REPLACE FUNCTION hasnt_materialized_view ( NAME, NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT ok( NOT _rexists( 'm', $1, $2 ), $3 );
+$$ LANGUAGE SQL;
+
+-- hasnt_materialized_view( materialized_view, description )
+CREATE OR REPLACE FUNCTION hasnt_materialized_view ( NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT ok( NOT _rexists( 'm', $1 ), $2 );
+$$ LANGUAGE SQL;
+
+-- hasnt_materialized_view( materialized_view )
+CREATE OR REPLACE FUNCTION hasnt_materialized_view ( NAME )
+RETURNS TEXT AS $$
+    SELECT hasnt_materialized_view( $1, 'Materialized view ' || quote_ident($1) || ' should not exist' );
+$$ LANGUAGE SQL;
+
+
+-- foreign_tables_are( schema, tables, description )
+CREATE OR REPLACE FUNCTION foreign_tables_are ( NAME, NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _are( 'foreign tables', _extras('f', $1, $2), _missing('f', $1, $2), $3);
+$$ LANGUAGE SQL;
+
+-- foreign_tables_are( tables, description )
+CREATE OR REPLACE FUNCTION foreign_tables_are ( NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _are( 'foreign tables', _extras('f', $1), _missing('f', $1), $2);
+$$ LANGUAGE SQL;
+
+-- foreign_tables_are( schema, tables )
+CREATE OR REPLACE FUNCTION foreign_tables_are ( NAME, NAME[] )
+RETURNS TEXT AS $$
+    SELECT _are(
+        'foreign tables', _extras('f', $1, $2), _missing('f', $1, $2),
+        'Schema ' || quote_ident($1) || ' should have the correct foreign tables'
+    );
+$$ LANGUAGE SQL;
+
+-- foreign_tables_are( tables )
+CREATE OR REPLACE FUNCTION foreign_tables_are ( NAME[] )
+RETURNS TEXT AS $$
+    SELECT _are(
+        'foreign tables', _extras('f', $1), _missing('f', $1),
+        'Search path ' || pg_catalog.current_setting('search_path') || ' should have the correct foreign tables'
+    );
+$$ LANGUAGE SQL;
+
+GRANT SELECT ON tap_funky           TO PUBLIC;
+GRANT SELECT ON pg_all_foreign_keys TO PUBLIC;

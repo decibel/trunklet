@@ -45,16 +45,6 @@ BEGIN
             GRANT ALL ON TABLE __tcache___id_seq TO PUBLIC;
 
             CREATE TEMP SEQUENCE __tresults___numb_seq;
-            CREATE TEMP TABLE __tresults__ (
-                numb   INTEGER NOT NULL DEFAULT nextval(''__tresults___numb_seq''),
-                ok     BOOLEAN NOT NULL DEFAULT TRUE,
-                aok    BOOLEAN NOT NULL DEFAULT TRUE,
-                descr  TEXT    NOT NULL DEFAULT '''',
-                type   TEXT    NOT NULL DEFAULT '''',
-                reason TEXT    NOT NULL DEFAULT ''''
-            );
-            CREATE UNIQUE INDEX __tresults___key ON __tresults__(numb);
-            GRANT ALL ON TABLE __tresults__ TO PUBLIC;
             GRANT ALL ON TABLE __tresults___numb_seq TO PUBLIC;
         ';
 
@@ -69,6 +59,7 @@ BEGIN
 
     -- Save the plan and return.
     PERFORM _set('plan', $1 );
+    PERFORM _set('failed', 0 );
     RETURN '1..' || $1;
 END;
 $$ LANGUAGE plpgsql strict;
@@ -96,7 +87,7 @@ RETURNS integer[] AS $$
 DECLARE
     ret integer[];
 BEGIN
-    EXECUTE 'SELECT ARRAY[ id, value] FROM __tcache__ WHERE label = ' ||
+    EXECUTE 'SELECT ARRAY[id, value] FROM __tcache__ WHERE label = ' ||
     quote_literal($1) || ' AND id = (SELECT MAX(id) FROM __tcache__ WHERE label = ' ||
     quote_literal($1) || ') LIMIT 1' INTO ret;
     RETURN ret;
@@ -183,27 +174,17 @@ $$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION add_result ( bool, bool, text, text, text )
 RETURNS integer AS $$
 BEGIN
-    EXECUTE 'INSERT INTO __tresults__ ( ok, aok, descr, type, reason )
-    VALUES( ' || $1 || ', '
-              || $2 || ', '
-              || quote_literal(COALESCE($3, '')) || ', '
-              || quote_literal($4) || ', '
-              || quote_literal($5) || ' )';
-    RETURN currval('__tresults___numb_seq');
+    IF NOT $1 THEN PERFORM _set('failed', _get('failed') + 1); END IF;
+    RETURN nextval('__tresults___numb_seq');
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION num_failed ()
 RETURNS INTEGER AS $$
-DECLARE
-    ret integer;
-BEGIN
-    EXECUTE 'SELECT COUNT(*)::INTEGER FROM __tresults__ WHERE ok = FALSE' INTO ret;
-    RETURN ret;
-END;
-$$ LANGUAGE plpgsql strict;
+    SELECT _get('failed');
+$$ LANGUAGE SQL strict;
 
-CREATE OR REPLACE FUNCTION _finish ( INTEGER, INTEGER, INTEGER)
+CREATE OR REPLACE FUNCTION _finish (INTEGER, INTEGER, INTEGER)
 RETURNS SETOF TEXT AS $$
 DECLARE
     curr_test ALIAS FOR $1;
@@ -641,7 +622,10 @@ DECLARE
 BEGIN
     output := '{}';
     FOR i IN 1..how_many LOOP
-        output = array_append(output, ok( TRUE, 'SKIP: ' || COALESCE( why, '') ) );
+        output = array_append(
+            output,
+            ok( TRUE ) || ' ' || diag( 'SKIP' || COALESCE( ' ' || why, '') )
+        );
     END LOOP;
     RETURN array_to_string(output, E'\n');
 END;
@@ -649,7 +633,7 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION skip ( text )
 RETURNS TEXT AS $$
-    SELECT ok( TRUE, 'SKIP: ' || $1 );
+    SELECT ok( TRUE ) || ' ' || diag( 'SKIP' || COALESCE(' ' || $1, '') );
 $$ LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION skip( int, text )
@@ -808,6 +792,90 @@ RETURNS TEXT AS $$
     SELECT performs_ok(
         $1, $2, 'Should run in less than ' || $2 || ' ms'
     );
+$$ LANGUAGE sql;
+
+-- Convenience function to run a query many times and returns
+-- the middle set of those times as defined by the last argument
+-- e.g. _time_trials('SELECT 1', 100, 0.8) will execute 'SELECT 1'
+-- 100 times, and return the execution times for the middle 80 runs
+--
+-- I could have left this logic in performs_within, but I have
+-- plans to hook into this function for other purposes outside
+-- of pgTAP
+CREATE TYPE _time_trial_type AS (a_time NUMERIC);
+CREATE OR REPLACE FUNCTION _time_trials(TEXT, INT, NUMERIC)
+RETURNS SETOF _time_trial_type AS $$
+DECLARE
+    query            TEXT := _query($1);
+    iterations       ALIAS FOR $2;
+    return_percent   ALIAS FOR $3;
+    start_time       TEXT;
+    act_time         NUMERIC;
+    times            NUMERIC[];
+    offset_it        INT;
+    limit_it         INT;
+    offset_percent   NUMERIC;
+    a_time	     _time_trial_type;
+BEGIN
+    -- Execute the query over and over
+    FOR i IN 1..iterations LOOP
+        start_time := timeofday();
+        EXECUTE query;
+        -- Store the execution time for the run in an array of times
+        times[i] := extract(millisecond from timeofday()::timestamptz - start_time::timestamptz);
+    END LOOP;
+    offset_percent := (1.0 - return_percent) / 2.0;
+    -- Ensure that offset skips the bottom X% of runs, or set it to 0
+    SELECT GREATEST((offset_percent * iterations)::int, 0) INTO offset_it;
+    -- Ensure that with limit the query to returning only the middle X% of runs
+    SELECT GREATEST((return_percent * iterations)::int, 1) INTO limit_it;
+
+    FOR a_time IN SELECT times[i]
+		  FROM generate_series(array_lower(times, 1), array_upper(times, 1)) i
+                  ORDER BY 1
+                  OFFSET offset_it
+                  LIMIT limit_it LOOP
+	RETURN NEXT a_time;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- performs_within( sql, average_milliseconds, within, iterations, description )
+CREATE OR REPLACE FUNCTION performs_within(TEXT, NUMERIC, NUMERIC, INT, TEXT) RETURNS TEXT AS $$
+DECLARE
+    query          TEXT := _query($1);
+    expected_avg   ALIAS FOR $2;
+    within         ALIAS FOR $3;
+    iterations     ALIAS FOR $4;
+    descr          ALIAS FOR $5;
+    avg_time       NUMERIC;
+BEGIN
+  SELECT avg(a_time) FROM _time_trials(query, iterations, 0.8) t1 INTO avg_time;
+  IF abs(avg_time - expected_avg) < within THEN RETURN ok(TRUE, descr); END IF;
+  RETURN ok(FALSE, descr) || E'\n' || diag(' average runtime: ' || avg_time || ' ms'
+     || E'\n desired average: ' || expected_avg || ' +/- ' || within || ' ms'
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+-- performs_within( sql, average_milliseconds, within, iterations )
+CREATE OR REPLACE FUNCTION performs_within(TEXT, NUMERIC, NUMERIC, INT) RETURNS TEXT AS $$
+SELECT performs_within(
+          $1, $2, $3, $4,
+          'Should run within ' || $2 || ' +/- ' || $3 || ' ms');
+$$ LANGUAGE sql;
+-- performs_within( sql, average_milliseconds, within, description )
+CREATE OR REPLACE FUNCTION performs_within(TEXT, NUMERIC, NUMERIC, TEXT) RETURNS TEXT AS $$
+SELECT performs_within(
+          $1, $2, $3, 10, $4
+        );
+$$ LANGUAGE sql;
+
+-- performs_within( sql, average_milliseconds, within )
+CREATE OR REPLACE FUNCTION performs_within(TEXT, NUMERIC, NUMERIC) RETURNS TEXT AS $$
+SELECT performs_within(
+          $1, $2, $3, 10,
+          'Should run within ' || $2 || ' +/- ' || $3 || ' ms');
 $$ LANGUAGE sql;
 
 CREATE OR REPLACE FUNCTION _ident_array_to_string( name[], text )
@@ -1244,7 +1312,7 @@ RETURNS TEXT AS $$
                AND n.nspname = $1
                AND t.typname = $2
                AND t.typtype = 'e'
-             ORDER BY e.oid
+             ORDER BY e.enumsortorder
         ),
         $3,
         $4
@@ -1272,7 +1340,7 @@ RETURNS TEXT AS $$
                AND pg_catalog.pg_type_is_visible(t.oid)
                AND t.typname = $1
                AND t.typtype = 'e'
-             ORDER BY e.oid
+             ORDER BY e.enumsortorder
         ),
         $2,
         $3
@@ -2276,6 +2344,65 @@ RETURNS TEXT AS $$
     SELECT ok( _strict($1), 'Function ' || quote_ident($1) || '() should be strict' );
 $$ LANGUAGE sql;
 
+-- isnt_strict( schema, function, args[], description )
+CREATE OR REPLACE FUNCTION isnt_strict ( NAME, NAME, NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _func_compare($1, $2, $3, NOT _strict($1, $2, $3), $4 );
+$$ LANGUAGE SQL;
+
+-- isnt_strict( schema, function, args[] )
+CREATE OR REPLACE FUNCTION isnt_strict( NAME, NAME, NAME[] )
+RETURNS TEXT AS $$
+    SELECT ok(
+        NOT _strict($1, $2, $3),
+        'Function ' || quote_ident($1) || '.' || quote_ident($2) || '(' ||
+        array_to_string($3, ', ') || ') should not be strict'
+    );
+$$ LANGUAGE sql;
+
+-- isnt_strict( schema, function, description )
+CREATE OR REPLACE FUNCTION isnt_strict ( NAME, NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT _func_compare($1, $2, NOT _strict($1, $2), $3 );
+$$ LANGUAGE SQL;
+
+-- isnt_strict( schema, function )
+CREATE OR REPLACE FUNCTION isnt_strict( NAME, NAME )
+RETURNS TEXT AS $$
+    SELECT ok(
+        NOT _strict($1, $2),
+        'Function ' || quote_ident($1) || '.' || quote_ident($2) || '() should not be strict'
+    );
+$$ LANGUAGE sql;
+
+-- isnt_strict( function, args[], description )
+CREATE OR REPLACE FUNCTION isnt_strict ( NAME, NAME[], TEXT )
+RETURNS TEXT AS $$
+    SELECT _func_compare(NULL, $1, $2, NOT _strict($1, $2), $3 );
+$$ LANGUAGE SQL;
+
+-- isnt_strict( function, args[] )
+CREATE OR REPLACE FUNCTION isnt_strict( NAME, NAME[] )
+RETURNS TEXT AS $$
+    SELECT ok(
+        NOT _strict($1, $2),
+        'Function ' || quote_ident($1) || '(' ||
+        array_to_string($2, ', ') || ') should not be strict'
+    );
+$$ LANGUAGE sql;
+
+-- isnt_strict( function, description )
+CREATE OR REPLACE FUNCTION isnt_strict( NAME, TEXT )
+RETURNS TEXT AS $$
+    SELECT _func_compare(NULL, $1, NOT _strict($1), $2 );
+$$ LANGUAGE sql;
+
+-- isnt_strict( function )
+CREATE OR REPLACE FUNCTION isnt_strict( NAME )
+RETURNS TEXT AS $$
+    SELECT ok( NOT _strict($1), 'Function ' || quote_ident($1) || '() should not be strict' );
+$$ LANGUAGE sql;
+
 CREATE OR REPLACE FUNCTION _expand_vol( char )
 RETURNS TEXT AS $$
    SELECT CASE $1
@@ -2469,7 +2596,6 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION _cleanup()
 RETURNS boolean AS $$
-    DROP TABLE __tresults__;
     DROP SEQUENCE __tresults___numb_seq;
     DROP TABLE __tcache__;
     DROP SEQUENCE __tcache___id_seq;
@@ -2477,6 +2603,11 @@ RETURNS boolean AS $$
 $$ LANGUAGE sql;
 
 -- diag_test_name ( test_name )
+CREATE OR REPLACE FUNCTION diag_test_name(TEXT)
+RETURNS TEXT AS $$
+    SELECT diag($1 || '()');
+$$ LANGUAGE SQL;
+
 CREATE OR REPLACE FUNCTION _runner( text[], text[], text[], text[], text[] )
 RETURNS SETOF TEXT AS $$
 DECLARE
@@ -2485,9 +2616,13 @@ DECLARE
     setup    ALIAS FOR $3;
     teardown ALIAS FOR $4;
     tests    ALIAS FOR $5;
-    tap      text;
-    verbos   boolean := _is_verbose(); -- verbose is a reserved word in 8.5.
-    num_faild INTEGER := 0;
+    tap      TEXT;
+    tfaild   INTEGER := 0;
+    ffaild   INTEGER := 0;
+    tnumb    INTEGER := 0;
+    fnumb    INTEGER := 0;
+    tok      BOOLEAN := TRUE;
+    errmsg   TEXT;
 BEGIN
     BEGIN
         -- No plan support.
@@ -2496,52 +2631,97 @@ BEGIN
     EXCEPTION
         -- Catch all exceptions and simply rethrow custom exceptions. This
         -- will roll back everything in the above block.
-        WHEN raise_exception THEN
-            RAISE EXCEPTION '%', SQLERRM;
+        WHEN raise_exception THEN RAISE EXCEPTION '%', SQLERRM;
     END;
 
-    BEGIN
-        FOR i IN 1..array_upper(tests, 1) LOOP
-            BEGIN
-                -- What test are we running?
-                IF verbos THEN RETURN NEXT diag_test_name(tests[i]); END IF;
+    -- Record how startup tests have failed.
+    tfaild := num_failed();
 
+    FOR i IN 1..COALESCE(array_upper(tests, 1), 0) LOOP
+        -- What subtest are we running?
+        RETURN NEXT '    ' || diag_test_name('Subtest: ' || tests[i]);
+
+        -- Reset the results.
+        tok := TRUE;
+        tnumb := COALESCE(_get('curr_test'), 0);
+
+        IF tnumb > 0 THEN
+            EXECUTE 'ALTER SEQUENCE __tresults___numb_seq RESTART WITH 1';
+            PERFORM _set('curr_test', 0);
+            PERFORM _set('failed', 0);
+        END IF;
+
+        BEGIN
+            BEGIN
                 -- Run the setup functions.
-                FOR tap IN SELECT * FROM _runem(setup, false) LOOP RETURN NEXT tap; END LOOP;
+                FOR tap IN SELECT * FROM _runem(setup, false) LOOP
+                    RETURN NEXT regexp_replace(tap, '^', '    ', 'gn');
+                END LOOP;
 
                 -- Run the actual test function.
                 FOR tap IN EXECUTE 'SELECT * FROM ' || tests[i] || '()' LOOP
-                    RETURN NEXT tap;
+                    RETURN NEXT regexp_replace(tap, '^', '    ', 'gn');
                 END LOOP;
 
                 -- Run the teardown functions.
-                FOR tap IN SELECT * FROM _runem(teardown, false) LOOP RETURN NEXT tap; END LOOP;
+                FOR tap IN SELECT * FROM _runem(teardown, false) LOOP
+                    RETURN NEXT regexp_replace(tap, '^', '    ', 'gn');
+                END LOOP;
 
-                -- Remember how many failed and then roll back.
-                num_faild := num_faild + num_failed();
-                RAISE EXCEPTION '__TAP_ROLLBACK__';
+                -- Emit the plan.
+                fnumb := COALESCE(_get('curr_test'), 0);
+                RETURN NEXT '    1..' || fnumb;
+
+                -- Emit any error messages.
+                IF fnumb = 0 THEN
+                    RETURN NEXT '    # No tests run!';
+                    tok = false;
+                ELSE
+                    -- Report failures.
+                    ffaild := num_failed();
+                    IF ffaild > 0 THEN
+                        tok := FALSE;
+                        RETURN NEXT '    ' || diag(
+                            'Looks like you failed ' || ffaild || ' test' ||
+                             CASE tfaild WHEN 1 THEN '' ELSE 's' END
+                             || ' of ' || fnumb
+                        );
+                    END IF;
+                END IF;
 
             EXCEPTION WHEN raise_exception THEN
-                IF SQLERRM <> '__TAP_ROLLBACK__' THEN
-                    -- We didn't raise it, so propagate it.
-                    RAISE EXCEPTION '%', SQLERRM;
-                END IF;
+                -- Something went wrong. Record that fact.
+                errmsg := SQLERRM;
             END;
-        END LOOP;
 
-        -- Run the shutdown functions.
-        FOR tap IN SELECT * FROM _runem(shutdown, false) LOOP RETURN NEXT tap; END LOOP;
+            -- Always raise an exception to rollback any changes.
+            RAISE EXCEPTION '__TAP_ROLLBACK__';
 
-        -- Raise an exception to rollback any changes.
-        RAISE EXCEPTION '__TAP_ROLLBACK__';
-    EXCEPTION WHEN raise_exception THEN
-        IF SQLERRM <> '__TAP_ROLLBACK__' THEN
-            -- We didn't raise it, so propagate it.
-            RAISE EXCEPTION '%', SQLERRM;
-        END IF;
-    END;
+        EXCEPTION WHEN raise_exception THEN
+            IF errmsg IS NOT NULL THEN
+                -- Something went wrong. Emit the error message.
+                tok := FALSE;
+                RETURN NEXT '    ' || diag('Test died: ' || errmsg);
+                errmsg := NULL;
+            END IF;
+       END;
+
+        -- Restore the sequence.
+        EXECUTE 'ALTER SEQUENCE __tresults___numb_seq RESTART WITH ' || tnumb + 1;
+        PERFORM _set('curr_test', tnumb);
+        PERFORM _set('failed', tfaild);
+
+        -- Record this test.
+        RETURN NEXT ok(tok, tests[i]);
+        IF NOT tok THEN tfaild := tfaild + 1; END IF;
+
+    END LOOP;
+
+    -- Run the shutdown functions.
+    FOR tap IN SELECT * FROM _runem(shutdown, false) LOOP RETURN NEXT tap; END LOOP;
+
     -- Finish up.
-    FOR tap IN SELECT * FROM _finish( currval('__tresults___numb_seq')::integer, 0, num_faild ) LOOP
+    FOR tap IN SELECT * FROM _finish( COALESCE(_get('curr_test'), 0), 0, tfaild ) LOOP
         RETURN NEXT tap;
     END LOOP;
 
