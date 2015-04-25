@@ -710,6 +710,7 @@ CREATE FUNCTION test_process
 DECLARE
   lname CONSTANT text := get_test_language_name();
   test CONSTANT text := $$SELECT trunklet.process( %L, %L, %L )$$;
+  template_name CONSTANT text := 'test template';
   p CONSTANT text := 'trunklet.process(): ';
 BEGIN
   PERFORM get_test_language_id();
@@ -727,14 +728,14 @@ BEGIN
     format( test, lname, any_to_trunklet_template('%s'::varchar), any_to_trunklet_parameter('{a}'::text[]) )
     , '22000'
     , 'templates for language "Our internal test language" must by of type "text"'
-    , p || 'invalid template'
+    , p || 'invalid template' -- TEMPLATE
   );
 
   RETURN NEXT throws_ok(
     format( test, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text) )
     , '22000'
     , 'parameters for language "Our internal test language" must by of type "text[]"'
-    , p || 'invalid parameter'
+    , p || 'invalid parameter' -- PARAMETERS
   );
 
   /*
@@ -744,13 +745,22 @@ BEGIN
   ;
   */
   CREATE TEMP VIEW test AS SELECT * FROM (VALUES
-        ( '%s'::text,   '{a}'::text[],  'a'::text )
-      , ( '%s %s',      '{a,b}',        'a b' )
-      , ( '%s %s',      '{a,NULL}',     'a ' )
-      , ( '%s',         '{NULL}',       '' )
-      , ( 'moo',        NULL,           'moo' )
-    ) a(template, parameters, expected)
+        ( 1::int, '%s'::text,   '{a}'::text[],  'a'::text )
+      , ( 2,      '%s %s',      '{a,b}',        'a b' )
+      , ( 3,      '%s %s',      '{a,NULL}',     'a ' )
+      , ( 4,      '%s',         '{NULL}',       '' )
+      , ( 5,      'moo',        NULL,           'moo' )
+    ) a(version, template, parameters, expected)
   ;
+
+  RETURN NEXT lives_ok(
+    format(
+        $$SELECT trunklet.template__add( get_test_language_name(), %L, version, template ) FROM test$$
+        , template_name
+      )
+    , 'Create predefined templates'
+  );
+
   RETURN QUERY
     SELECT is(
           /*
@@ -760,6 +770,25 @@ BEGIN
           trunklet.process( lname, any_to_trunklet_template(template), any_to_trunklet_parameter(parameters) )
           , expected
           , format( 'trunklet.process( ..., %L, %L )', template, parameters )
+        )
+      FROM test
+  ;
+
+  RETURN QUERY
+    SELECT is(
+          trunklet.process( lname, template_name, any_to_trunklet_parameter(parameters) )
+          , expected
+          , format( 'trunklet.process( ..., %L, %L )', template_name, parameters )
+        )
+      FROM test
+      WHERE version = 1
+  ;
+
+  RETURN QUERY
+    SELECT is(
+          trunklet.process( lname, template_name, version, any_to_trunklet_parameter(parameters) )
+          , expected
+          , format( 'trunklet.process( ..., %L, %L, %L )', template_name, version, parameters )
         )
       FROM test
   ;

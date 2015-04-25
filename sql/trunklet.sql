@@ -443,34 +443,69 @@ $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.process(
   language_name _trunklet.language.language_name%TYPE
-  /*
-  , template anyelement
-  , parameters anyelement
-  */
   , template variant.variant(trunklet_template)
   , parameters variant.variant(trunklet_parameter)
 ) RETURNS text LANGUAGE plpgsql AS $body$
 DECLARE
+  c_template_regtype CONSTANT regtype := variant.original_type(template);
+
   v_language _trunklet.language;
+  v_template _trunklet.template;
   sql text;
   v_return text;
 BEGIN
+  /*
+   * Special case handling to support process( language_name, template_name, paramaters )
+   *
+   * If "template" is text or varchar, then see if we have a stored template
+   * with that name. If we do, use it; otherwise treat "template" as an actual
+   * template.
+   */
+  IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
+    v_template := _trunklet.template__get( language_name, template::text, loose := true );
+  END IF;
+  IF v_template IS NULL THEN
+    v_template.template := template;
+  END IF;
+
+
   -- Can't do this during DECLARE
   v_language := _trunklet.language__get( language_name );
 
-  PERFORM _trunklet.verify_type( language_name, v_language.template_type, variant.original_type(template), 'template' );
+  PERFORM _trunklet.verify_type( language_name, v_language.template_type, c_template_regtype, 'template' );
   PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_type(parameters), 'parameter' );
 
   sql := format(
     'SELECT _trunklet_functions.%s( $1, $2 )'
     , _trunklet.function_name( v_language.language_id, 'process' )
   );
-  EXECUTE sql INTO STRICT v_return USING template, parameters;
+  EXECUTE sql INTO STRICT v_return USING v_template.template, parameters;
   RAISE DEBUG '% returned %', sql, v_return;
 
   RETURN v_return;
 END
 $body$;
 
+CREATE OR REPLACE FUNCTION trunklet.process(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE
+  , parameters variant.variant(trunklet_parameter)
+) RETURNS text LANGUAGE SQL AS $body$
+SELECT trunklet.process(
+    language_name
+    , (_trunklet.template__get( language_name, template_name, template_version )).template
+    , parameters
+  )
+$body$;
+/*
+CREATE OR REPLACE FUNCTION trunklet.process(
+  language_name _trunklet.language.language_name%TYPE
+  , template_name _trunklet.template.template_name%TYPE
+  , parameters variant.variant(trunklet_parameter)
+) RETURNS text LANGUAGE SQL AS $body$
+SELECT trunklet.process( language_name, template_name, 1, parameters )
+$body$;
+*/
 
 -- vi: expandtab sw=2 ts=2
