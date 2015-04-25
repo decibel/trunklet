@@ -472,13 +472,13 @@ $body$;
  * FUNCTION _trunklet.template__get
  */
 CREATE FUNCTION test_template__get
---\i test/helpers/f1.sql
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
 BEGIN
+  PERFORM get_test_templates();
   RETURN NEXT function_privs_are(
     '_trunklet', 'template__get'
-    , ('{' || language_name_type() || ', text, int}')::text[]
+    , ('{' || language_name_type() || ', text, int, boolean}')::text[]
     , 'public', NULL::text[]
   );
 
@@ -488,12 +488,44 @@ BEGIN
     , format( $$language "%s" not found$$, bogus_language_name() )
   );
 
-  PERFORM get_test_language_id();
   RETURN NEXT throws_ok(
     format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, get_test_language_name() )
     , 'P0002'
     , format( $$template with language "%s", template name "bogus" and version 1 not found$$, get_test_language_name() )
   );
+
+  RETURN NEXT is(
+    ( SELECT row(g.*)::_trunklet.template FROM _trunklet.template__get( get_test_language_name(), 'bogus', loose := true ) AS g )
+    , NULL::_trunklet.template
+    , 'Verify loose := true'
+  );
+
+  RETURN NEXT bag_eq(
+    $$SELECT * FROM _trunklet.template__get( get_test_language_name(), 'test template' )$$
+    , $$SELECT *
+          FROM _trunklet.template
+          WHERE language_id = get_test_language_id()
+            AND template_name = 'test template'
+            AND template_version = 1
+      $$
+    , $$Check _trunklet.template__get( ..., 'test template' )$$
+  );
+  /*
+  RETURN NEXT bag_eq(
+    $$SELECT * FROM _trunklet.template__get( get_test_language_name(), 'test template', i ) FROM generate_series(1, 2) i$$
+    , $$SELECT * FROM verify_test_template$$
+    , $$Check _trunklet.template__get( ..., 'test template', version )$$
+  );
+  */
+  RETURN QUERY SELECT is(
+        _trunklet.template__get( language_name, template_name, template_version )
+        , ROW(t.*)::_trunklet.template
+        , format( $$Check _trunklet.template__get( ..., 'test template', %s )$$, template_version )
+      )
+    FROM _trunklet.template t
+      LEFT JOIN _trunklet.language l USING( language_id )
+  ;
+
 END
 $body$;
 

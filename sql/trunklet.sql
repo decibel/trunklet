@@ -300,6 +300,7 @@ CREATE OR REPLACE FUNCTION _trunklet.template__get(
   language_name _trunklet.language.language_name%TYPE
   , template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE DEFAULT 1
+  , loose boolean DEFAULT false
 ) RETURNS _trunklet.template LANGUAGE plpgsql AS $body$
 DECLARE
   v_language_id CONSTANT _trunklet.language.language_id%TYPE := _trunklet.language__get_id( language_name );
@@ -315,18 +316,23 @@ BEGIN
   RETURN r;
 EXCEPTION
   WHEN no_data_found THEN
-    RAISE EXCEPTION 'template with language "%", template name "%" and version % not found'
-        , language_name
-        , template_name
-        , template_version
-      USING ERRCODE = 'no_data_found'
-    ;
+    IF loose THEN
+      RETURN NULL;
+    ELSE
+      RAISE EXCEPTION 'template with language "%", template name "%" and version % not found'
+          , language_name
+          , template_name
+          , template_version
+        USING ERRCODE = 'no_data_found'
+      ;
+    END IF;
 END
 $body$;
 REVOKE ALL ON FUNCTION _trunklet.template__get(
   language_name _trunklet.language.language_name%TYPE
   , template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
+  , loose boolean
 ) FROM public;
 
 CREATE OR REPLACE FUNCTION trunklet.template__add(
