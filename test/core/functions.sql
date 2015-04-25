@@ -452,13 +452,16 @@ BEGIN
           JOIN _trunklet.language l USING( language_id )
         WHERE template_id = ANY( $$ || quote_literal(ids) || $$ )
       $$
-    , $$SELECT get_test_language_name()
-            , ($$ || quote_literal(ids) || $$::int[])[i] AS template_id
-            , 'test template'::text AS template_name
-            , i AS template_version
-            , ('test ' || i) AS template
-          FROM generate_series(1,2) AS i(i)
-      $$
+    , format(
+        $$SELECT get_test_language_name() AS language_name
+              , (%L::int[])[i] AS template_id
+              , 'test template'::text AS template_name
+              , i AS template_version
+              , ('test ' || i) AS template
+            FROM generate_series(1,2) AS i(i)
+        $$
+        , ids
+      )
     , $$Verify template__add results$$
   );
 END
