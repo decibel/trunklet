@@ -1,0 +1,16 @@
+\set ECHO none
+ ?column? 
+----------
+ t
+(1 row)
+
+ ?column? 
+----------
+ t
+(1 row)
+
+ ?column? 
+----------
+ t
+(1 row)
+

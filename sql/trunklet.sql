@@ -11,10 +11,10 @@ SET search_path = pg_catalog;
 
 CREATE ROLE trunklet__dependency;
 
--- Register our variants
-SELECT variant.register( 'trunklet_template', '{}', true );
-SELECT variant.register( 'trunklet_parameter', '{}' );
-SELECT variant.register( 'trunklet_return', '{}' );
+-- Register our variants. Do IS NOT NULL for consistent test output in the build test
+SELECT variant.register( 'trunklet_template', '{}', true ) IS NOT NULL;
+SELECT variant.register( 'trunklet_parameter', '{}' ) IS NOT NULL;
+SELECT variant.register( 'trunklet_return', '{}' ) IS NOT NULL;
 
 CREATE SCHEMA _trunklet;
 GRANT USAGE ON SCHEMA _trunklet TO trunklet__dependency;
