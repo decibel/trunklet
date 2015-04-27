@@ -796,4 +796,18 @@ END
 $body$;
 
 
+/*
+ * FUNCTION trunklet.execute
+CREATE FUNCTION test_execute
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  lname CONSTANT text := get_test_language_name();
+  test CONSTANT text := $$SELECT trunklet.execute( %L, %L, %L )$$;
+  template_name CONSTANT text := 'test template';
+BEGIN
+  PERFORM get_test_language_id();
+  PERFORM variant.add_type( 'trunklet_template', 'varchar' );
+  PERFORM variant.add_type( 'trunklet_parameter', 'text' );
+ */
+
 -- vi: expandtab sw=2 ts=2
