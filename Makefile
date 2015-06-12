@@ -47,7 +47,8 @@ tag:
 	git push --set-upstream origin $(EXTVERSION)
 
 dist:
-	git archive --prefix=$(EXTENSION)-$(EXTVERSION)/ -o $(EXTENSION)-$(EXTVERSION).zip HEAD
+	git archive --prefix=$(EXTENSION)-$(EXTVERSION)/ -o ../$(EXTENSION)-$(EXTVERSION).zip $(EXTVERSION)
+	
 
 # To use this, do make print-VARIABLE_NAME
 print-%  : ; @echo $* = $($*)
