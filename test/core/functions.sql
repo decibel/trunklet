@@ -744,14 +744,18 @@ BEGIN
     WHERE pronamespace = (SELECT oid FROM pg_namespace WHERE nspname='_trunklet_functions')
   ;
   */
-  CREATE TEMP VIEW test AS SELECT * FROM (VALUES
-        ( 1::int, '%s'::text,   '{a}'::text[],  'a'::text )
-      , ( 2,      '%s %s',      '{a,b}',        'a b' )
-      , ( 3,      '%s %s',      '{a,NULL}',     'a ' )
-      , ( 4,      '%s',         '{NULL}',       '' )
-      , ( 5,      'moo',        NULL,           'moo' )
-    ) a(version, template, parameters, expected)
-  ;
+
+  RETURN NEXT lives_ok($lives$
+    CREATE TEMP VIEW test AS SELECT * FROM (VALUES
+          ( 1::int, '%s'::text,   '{a}'::text[],  'a'::text )
+        , ( 2,      '%s %s',      '{a,b}',        'a b' )
+        , ( 3,      '%s %s',      '{a,NULL}',     'a ' )
+        , ( 4,      '%s',         '{NULL}',       '' )
+        , ( 5,      'moo',        NULL,           'moo' )
+      ) a(version, template, parameters, expected)
+    $lives$
+    , 'Create test view'
+  );
 
   RETURN NEXT lives_ok(
     format(

@@ -35,19 +35,20 @@ ok 4 - _trunklet_test.test_language__get_id
     ok 1 - trunklet.process(): invalid language
     ok 2 - trunklet.process(): invalid template
     ok 3 - trunklet.process(): invalid parameter
-    ok 4 - Create predefined templates
-    ok 5 - trunklet.process( ..., '%s', '{a}' )
-    ok 6 - trunklet.process( ..., '%s %s', '{a,b}' )
-    ok 7 - trunklet.process( ..., '%s %s', '{a,NULL}' )
-    ok 8 - trunklet.process( ..., '%s', '{NULL}' )
-    ok 9 - trunklet.process( ..., 'moo', NULL )
-    ok 10 - trunklet.process( ..., 'test template', '{a}' )
-    ok 11 - trunklet.process( ..., 'test template', '1', '{a}' )
-    ok 12 - trunklet.process( ..., 'test template', '2', '{a,b}' )
-    ok 13 - trunklet.process( ..., 'test template', '3', '{a,NULL}' )
-    ok 14 - trunklet.process( ..., 'test template', '4', '{NULL}' )
-    ok 15 - trunklet.process( ..., 'test template', '5', NULL )
-    1..15
+    ok 4 - Create test view
+    ok 5 - Create predefined templates
+    ok 6 - trunklet.process( ..., '%s', '{a}' )
+    ok 7 - trunklet.process( ..., '%s %s', '{a,b}' )
+    ok 8 - trunklet.process( ..., '%s %s', '{a,NULL}' )
+    ok 9 - trunklet.process( ..., '%s', '{NULL}' )
+    ok 10 - trunklet.process( ..., 'moo', NULL )
+    ok 11 - trunklet.process( ..., 'test template', '{a}' )
+    ok 12 - trunklet.process( ..., 'test template', '1', '{a}' )
+    ok 13 - trunklet.process( ..., 'test template', '2', '{a,b}' )
+    ok 14 - trunklet.process( ..., 'test template', '3', '{a,NULL}' )
+    ok 15 - trunklet.process( ..., 'test template', '4', '{NULL}' )
+    ok 16 - trunklet.process( ..., 'test template', '5', NULL )
+    1..16
 ok 5 - _trunklet_test.test_process
     # Subtest: _trunklet_test.test_schemas()
     ok 1 - Role public should be granted USAGE on schema trunklet
