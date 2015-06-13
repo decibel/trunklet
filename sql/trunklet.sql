@@ -9,7 +9,15 @@ SET client_min_messages = warning;
 -- Set a safe search_path
 SET search_path = pg_catalog;
 
-CREATE ROLE trunklet__dependency;
+DO $do$
+BEGIN
+  CREATE ROLE trunklet__dependency;
+EXCEPTION
+	WHEN duplicate_object THEN
+		-- TODO: Ensure options are what we expect
+		NULL;
+END
+$do$;
 
 -- Register our variants. Do IS NOT NULL for consistent test output in the build test
 SELECT variant.register( 'trunklet_template', '{}', true ) IS NOT NULL;
