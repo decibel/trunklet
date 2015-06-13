@@ -445,8 +445,13 @@ CREATE OR REPLACE FUNCTION trunklet.process(
   language_name _trunklet.language.language_name%TYPE
   , template variant.variant(trunklet_template)
   , parameters variant.variant(trunklet_parameter)
-) RETURNS text LANGUAGE plpgsql AS $body$
+) RETURNS text LANGUAGE plpgsql
+  SECURITY DEFINER SET search_path = pg_catalog
+AS $body$
 DECLARE
+/*
+ * !!!!! SECURITY DEFINER !!!!!
+ */
   c_template_regtype CONSTANT regtype := variant.original_type(template);
 
   v_language _trunklet.language;
@@ -472,6 +477,9 @@ BEGIN
   -- Can't do this during DECLARE
   v_language := _trunklet.language__get( language_name );
 
+/*
+ * !!!!! SECURITY DEFINER !!!!!
+ */
   PERFORM _trunklet.verify_type( language_name, v_language.template_type, c_template_regtype, 'template' );
   PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_type(parameters), 'parameter' );
 
@@ -491,7 +499,12 @@ CREATE OR REPLACE FUNCTION trunklet.process(
   , template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
   , parameters variant.variant(trunklet_parameter)
-) RETURNS text LANGUAGE SQL AS $body$
+) RETURNS text LANGUAGE SQL
+  SECURITY DEFINER SET search_path = pg_catalog
+AS $body$
+/*
+ * !!!!! SECURITY DEFINER !!!!!
+ */
 SELECT trunklet.process(
     language_name
     , (_trunklet.template__get( language_name, template_name, template_version )).template

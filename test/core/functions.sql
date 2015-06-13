@@ -712,6 +712,8 @@ DECLARE
   test CONSTANT text := $$SELECT trunklet.process( %L, %L, %L )$$;
   template_name CONSTANT text := 'test template';
   p CONSTANT text := 'trunklet.process(): ';
+  c_test_role CONSTANT name := 'Completely bogus trunklet test role';
+  c_original_role CONSTANT name := current_user;
 BEGIN
   PERFORM get_test_language_id();
   PERFORM variant.add_type( 'trunklet_template', 'varchar' );
@@ -746,13 +748,23 @@ BEGIN
   */
 
   RETURN NEXT lives_ok($lives$
-    CREATE TEMP VIEW test AS SELECT * FROM (VALUES
-          ( 1::int, '%s'::text,   '{a}'::text[],  'a'::text )
-        , ( 2,      '%s %s',      '{a,b}',        'a b' )
-        , ( 3,      '%s %s',      '{a,NULL}',     'a ' )
-        , ( 4,      '%s',         '{NULL}',       '' )
-        , ( 5,      'moo',        NULL,           'moo' )
-      ) a(version, template, parameters, expected)
+    CREATE TEMP VIEW test AS
+    SELECT *
+          -- Once we switch roles later we can't run these functions, so do that in the view instead
+          , any_to_trunklet_template(template) AS template_v
+          , any_to_trunklet_parameter(parameters) AS parameters_v
+      FROM (
+          SELECT *
+            FROM (VALUES
+                  ( 1::int, '%s'::text,   '{a}'::text[],  'a'::text )
+                , ( 2,      '%s %s',      '{a,b}',        'a b' )
+                , ( 3,      '%s %s',      '{a,NULL}',     'a ' )
+                , ( 4,      '%s',         '{NULL}',       '' )
+                , ( 5,      'moo',        NULL,           'moo' )
+              ) a(version, template, parameters, expected)
+        ) a
+    ;
+    GRANT SELECT ON test TO PUBLIC;
     $lives$
     , 'Create test view'
   );
@@ -765,13 +777,28 @@ BEGIN
     , 'Create predefined templates'
   );
 
+  RETURN NEXT lives_ok(
+    format( 'CREATE ROLE %I', c_test_role )
+    , 'Create test role'
+  );
+  RETURN NEXT lives_ok(
+    format( 'SET LOCAL ROLE = %I', c_test_role )
+    , 'Change to test role'
+  );
+  RETURN NEXT is(
+    current_user
+    , c_test_role
+    , 'Verify role change' -- Roles in functions are finicky enough this is worth testing for
+  );
+  RAISE DEBUG 'current_user = %, search_path = %', current_user, current_setting('search_path');
+
   RETURN QUERY
     SELECT is(
           /*
            * REMEMBER: the test language is actually just format, so first argument
            * here is a format string itself, second is an array of text values.
            */
-          trunklet.process( lname, any_to_trunklet_template(template), any_to_trunklet_parameter(parameters) )
+          trunklet.process( lname, template_v, parameters_v )
           , expected
           , format( 'trunklet.process( ..., %L, %L )', template, parameters )
         )
@@ -780,7 +807,7 @@ BEGIN
 
   RETURN QUERY
     SELECT is(
-          trunklet.process( lname, template_name, any_to_trunklet_parameter(parameters) )
+          trunklet.process( lname, template_name, parameters_v )
           , expected
           , format( 'trunklet.process( ..., %L, %L )', template_name, parameters )
         )
@@ -790,12 +817,21 @@ BEGIN
 
   RETURN QUERY
     SELECT is(
-          trunklet.process( lname, template_name, version, any_to_trunklet_parameter(parameters) )
+          trunklet.process( lname, template_name, version, parameters_v )
           , expected
           , format( 'trunklet.process( ..., %L, %L, %L )', template_name, version, parameters )
         )
       FROM test
   ;
+
+  RETURN NEXT lives_ok(
+    format( 'SET LOCAL ROLE = %I', c_original_role )
+    , 'Change back to original role'
+  );
+  RETURN NEXT lives_ok(
+    format( 'DROP ROLE %I', c_test_role )
+    , 'Drop test role'
+  );
 END
 $body$;
 
