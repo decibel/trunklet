@@ -14,18 +14,23 @@ REGRESS_OPTS = --inputdir=test --load-language=plpgsql
 #
 #MODULES      = $(patsubst %.c,%,$(wildcard src/*.c))
 PG_CONFIG    = pg_config
-PG91         = $(shell $(PG_CONFIG) --version | grep -qE " 8\.| 9\.0" && echo no || echo yes)
 
 EXTRA_CLEAN  = $(wildcard $(EXTENSION)-*.zip)
+VERSION 	 = $(shell $(PG_CONFIG) --version | awk '{print $$2}' | sed -e 's/devel$$//')
+MAJORVER 	 = $(shell echo $(VERSION) | cut -d . -f1,2 | tr -d .)
 
-ifeq ($(PG91),yes)
+test		 = $(shell test $(1) $(2) $(3) && echo yes || echo no)
+
+GE91		 = $(call test, $(MAJORVER), -ge, 91)
+
+ifeq ($(GE91),yes)
 all: sql/$(EXTENSION)--$(EXTVERSION).sql
 
 sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
 	cp $< $@
 
-DATA = $(wildcard sql/*--*.sql) sql/$(EXTENSION)--$(EXTVERSION).sql
-EXTRA_CLEAN = sql/$(EXTENSION)--$(EXTVERSION).sql
+DATA = $(wildcard sql/*--*.sql)
+EXTRA_CLEAN += sql/$(EXTENSION)--$(EXTVERSION).sql
 endif
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
@@ -42,13 +47,22 @@ test: clean install installcheck
 results: test
 	rsync -rlpgovP results/ test/expected
 
+rmtag:
+	@test -z "$$(git branch --list $(EXTVERSION))" || git branch -d $(EXTVERSION)
+
 tag:
+	@test -z "$$(git status --porcelain)" || (echo 'Untracked changes!'; echo; git status; exit 1)
 	git branch $(EXTVERSION)
 	git push --set-upstream origin $(EXTVERSION)
 
-dist:
+.PHONY: forcetag
+forcetag: rmtag tag
+
+dist: tag
 	git archive --prefix=$(EXTENSION)-$(EXTVERSION)/ -o ../$(EXTENSION)-$(EXTVERSION).zip $(EXTVERSION)
-	
+
+.PHONY: forcedist
+forcedist: forcetag dist
 
 # To use this, do make print-VARIABLE_NAME
 print-%  : ; @echo $* = $($*)
