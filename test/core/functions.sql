@@ -742,7 +742,6 @@ DECLARE
 BEGIN
   PERFORM get_test_language_id();
   PERFORM variant.add_type( 'trunklet_template', 'varchar' );
-  PERFORM variant.add_type( 'trunklet_parameter', 'text' );
 
   RETURN NEXT throws_ok(
     format( test_l, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
