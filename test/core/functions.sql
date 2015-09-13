@@ -474,6 +474,34 @@ BEGIN
 END
 $body$;
 
+CREATE FUNCTION test_secdef_privs
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+BEGIN
+  RETURN QUERY SELECT is(
+        proacl
+        , NULL
+        , 'Verify acl for ' || p.oid::regprocedure
+      )
+    FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE nspname = 'trunklet'
+      AND prosecdef
+  ;
+
+  RETURN QUERY SELECT is(
+        proconfig
+        , '{search_path=pg_catalog}'
+        , 'Verify search_path for ' || p.oid::regprocedure
+      )
+    FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE nspname = 'trunklet'
+      AND prosecdef
+  ;
+
+END
+$body$;
 
 /*
  * FUNCTION _trunklet.template__get
@@ -483,12 +511,6 @@ CREATE FUNCTION test_template__get
 DECLARE
 BEGIN
   PERFORM get_test_templates();
-  RETURN NEXT function_privs_are(
-    '_trunklet', 'template__get'
-    , ('{' || language_name_type() || ', text, int, boolean}')::text[]
-    , 'public', NULL::text[]
-  );
-
   RETURN NEXT throws_ok(
     format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, bogus_language_name() )
     , 'P0002'
