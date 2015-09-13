@@ -427,6 +427,13 @@ BEGIN
   IF NOT v_array_allowed THEN
     PERFORM variant.add_type( 'trunklet_template', 'text[]' );
   END IF;
+
+  RETURN NEXT throws_ok(
+    $$SELECT trunklet.template__add( bogus_language_name(), 'test_template', any_to_trunklet_template('test 1'::text) )$$
+    , format( 'language "%s" not found', bogus_language_name() )
+    , 'Bogus language throws error'
+  );
+
   RETURN NEXT todo( 'Need to implement template type enforcement' );
   RETURN NEXT throws_ok(
     $$SELECT trunklet.template__add( get_test_language_name(), 'test_template', 9, '{a,b}'::text[]::variant.variant(trunklet_template) )$$
