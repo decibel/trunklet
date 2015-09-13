@@ -511,26 +511,21 @@ CREATE FUNCTION test_template__get
 DECLARE
 BEGIN
   PERFORM get_test_templates();
-  RETURN NEXT throws_ok(
-    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, bogus_language_name() )
-    , 'P0002'
-    , format( $$language "%s" not found$$, bogus_language_name() )
-  );
 
   RETURN NEXT throws_ok(
-    format( $$SELECT _trunklet.template__get( %L, 'bogus' )$$, get_test_language_name() )
+    format( $$SELECT _trunklet.template__get( 'bogus' )$$ )
     , 'P0002'
-    , format( $$template with language "%s", template name "bogus" and version 1 not found$$, get_test_language_name() )
+    , format( $$template name "bogus" at version 1 not found$$, get_test_language_name() )
   );
 
   RETURN NEXT is(
-    ( SELECT row(g.*)::_trunklet.template FROM _trunklet.template__get( get_test_language_name(), 'bogus', loose := true ) AS g )
+    ( SELECT row(g.*)::_trunklet.template FROM _trunklet.template__get( 'bogus', loose := true ) AS g )
     , NULL::_trunklet.template
     , 'Verify loose := true'
   );
 
   RETURN NEXT bag_eq(
-    $$SELECT * FROM _trunklet.template__get( get_test_language_name(), 'test template' )$$
+    $$SELECT * FROM _trunklet.template__get( 'test template' )$$
     , $$SELECT *
           FROM _trunklet.template
           WHERE language_id = get_test_language_id()
@@ -547,9 +542,9 @@ BEGIN
   );
   */
   RETURN QUERY SELECT is(
-        _trunklet.template__get( language_name, template_name, template_version )
+        _trunklet.template__get( template_name, template_version )
         , ROW(t.*)::_trunklet.template
-        , format( $$Check _trunklet.template__get( ..., 'test template', %s )$$, template_version )
+        , format( $$Check _trunklet.template__get( 'test template', %s )$$, template_version )
       )
     FROM _trunklet.template t
       LEFT JOIN _trunklet.language l USING( language_id )
@@ -572,8 +567,8 @@ DECLARE
   ;
 BEGIN
   ids := get_test_templates();
-  PERFORM trunklet.template__remove( get_test_language_name(), 'test template' );
-  PERFORM trunklet.template__remove( get_test_language_name(), 'test template', 2 );
+  PERFORM trunklet.template__remove( 'test template' );
+  PERFORM trunklet.template__remove( 'test template', 2 );
   -- Drop temp table now that templates are gone
   DROP TABLE test_templates;
 
@@ -738,7 +733,8 @@ CREATE FUNCTION test_process
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   lname CONSTANT text := get_test_language_name();
-  test CONSTANT text := $$SELECT trunklet.process( %L, %L, %L )$$;
+  test_l CONSTANT text := $$SELECT trunklet.process_language( %L, %L, %L )$$;
+  test CONSTANT text := replace( test_l, '_language', '' );
   template_name CONSTANT text := 'test template';
   p CONSTANT text := 'trunklet.process(): ';
   c_test_role CONSTANT name := 'Completely bogus trunklet test role';
@@ -749,21 +745,21 @@ BEGIN
   PERFORM variant.add_type( 'trunklet_parameter', 'text' );
 
   RETURN NEXT throws_ok(
-    format( test, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
+    format( test_l, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
     , 'P0002'
     , 'language "bogus template language that does not exist" not found'
     , p || 'invalid language'
   );
 
   RETURN NEXT throws_ok(
-    format( test, lname, any_to_trunklet_template('%s'::varchar), any_to_trunklet_parameter('{a}'::text[]) )
+    format( test_l, lname, any_to_trunklet_template('%s'::varchar), any_to_trunklet_parameter('{a}'::text[]) )
     , '22000'
     , 'templates for language "Our internal test language" must by of type "text"'
     , p || 'invalid template' -- TEMPLATE
   );
 
   RETURN NEXT throws_ok(
-    format( test, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text) )
+    format( test_l, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text) )
     , '22000'
     , 'parameters for language "Our internal test language" must by of type "text[]"'
     , p || 'invalid parameter' -- PARAMETERS
@@ -800,7 +796,8 @@ BEGIN
 
   RETURN NEXT lives_ok(
     format(
-        $$SELECT trunklet.template__add( get_test_language_name(), %L, version, template ) FROM test$$
+        $$SELECT trunklet.template__add( %L, %L, version, template ) FROM test$$
+        , lname
         , template_name
       )
     , 'Create predefined templates'
@@ -827,31 +824,37 @@ BEGIN
            * REMEMBER: the test language is actually just format, so first argument
            * here is a format string itself, second is an array of text values.
            */
-          trunklet.process( lname, template_v, parameters_v )
+          trunklet.process_language( lname, template_v, parameters_v )
           , expected
           , format( 'trunklet.process( ..., %L, %L )', template, parameters )
         )
       FROM test
   ;
 
-  RETURN QUERY
-    SELECT is(
-          trunklet.process( lname, template_name, parameters_v )
-          , expected
-          , format( 'trunklet.process( ..., %L, %L )', template_name, parameters )
-        )
-      FROM test
-      WHERE version = 1
-  ;
+  -- This stuff will die if we screwed up template creation above
+  BEGIN
+    RETURN QUERY
+      SELECT is(
+            trunklet.process( template_name, parameters_v )
+            , expected
+            , format( 'trunklet.process( %L, %L )', template_name, parameters )
+          )
+        FROM test
+        WHERE version = 1
+    ;
 
-  RETURN QUERY
-    SELECT is(
-          trunklet.process( lname, template_name, version, parameters_v )
-          , expected
-          , format( 'trunklet.process( ..., %L, %L, %L )', template_name, version, parameters )
-        )
-      FROM test
-  ;
+    RETURN QUERY
+      SELECT is(
+            trunklet.process( template_name, version, parameters_v )
+            , expected
+            , format( 'trunklet.process( %L, %L, %L )', template_name, version, parameters )
+          )
+        FROM test
+    ;
+  EXCEPTION
+    WHEN others THEN
+      RAISE WARNING 'Caught exception %: %', SQLSTATE, SQLERRM;
+  END;
 
   RETURN NEXT lives_ok(
     format( 'SET LOCAL ROLE = %I', c_original_role )

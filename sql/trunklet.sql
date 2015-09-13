@@ -84,6 +84,11 @@ COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used to pass 
 COMMENT ON COLUMN _trunklet.language.parameter_type IS $$Data type used by templates in this language.$$;
 -- TODO: Add AFTER UPDATE trigger to re-validate the type of all stored templates for a language if template_type changes
 CREATE OR REPLACE FUNCTION _trunklet.language__get(
+  language_id _trunklet.language.language_id%TYPE
+) RETURNS _trunklet.language STABLE LANGUAGE sql AS $body$
+  SELECT * FROM _trunklet.language l WHERE l.language_id = language__get.language_id
+$body$;
+CREATE OR REPLACE FUNCTION _trunklet.language__get(
   language_name _trunklet.language.language_name%TYPE
 ) RETURNS _trunklet.language STABLE LANGUAGE plpgsql AS $body$
 DECLARE
@@ -305,19 +310,16 @@ CREATE TABLE _trunklet.template(
 GRANT REFERENCES ON _trunklet.template TO trunklet__dependency;
 
 CREATE OR REPLACE FUNCTION _trunklet.template__get(
-  language_name _trunklet.language.language_name%TYPE
-  , template_name _trunklet.template.template_name%TYPE
+  template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE DEFAULT 1
   , loose boolean DEFAULT false
 ) RETURNS _trunklet.template LANGUAGE plpgsql AS $body$
 DECLARE
-  v_language_id CONSTANT _trunklet.language.language_id%TYPE := _trunklet.language__get_id( language_name );
   r _trunklet.template;
 BEGIN
   SELECT * INTO STRICT r
     FROM _trunklet.template t
-    WHERE t.language_id = v_language_id
-      AND t.template_name = template__get.template_name
+    WHERE t.template_name = template__get.template_name
       AND t.template_version = template__get.template_version
   ;
 
@@ -327,8 +329,7 @@ EXCEPTION
     IF loose THEN
       RETURN NULL;
     ELSE
-      RAISE EXCEPTION 'template with language "%", template name "%" and version % not found'
-          , language_name
+      RAISE EXCEPTION 'template name "%" at version % not found'
           , template_name
           , template_version
         USING ERRCODE = 'no_data_found'
@@ -337,8 +338,7 @@ EXCEPTION
 END
 $body$;
 REVOKE ALL ON FUNCTION _trunklet.template__get(
-  language_name _trunklet.language.language_name%TYPE
-  , template_name _trunklet.template.template_name%TYPE
+  template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
   , loose boolean
 ) FROM public;
@@ -348,7 +348,13 @@ CREATE OR REPLACE FUNCTION trunklet.template__add(
   , template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE 
   , template _trunklet.template.template%TYPE 
-) RETURNS _trunklet.template.template_id%TYPE SECURITY DEFINER LANGUAGE sql AS $body$
+) RETURNS _trunklet.template.template_id%TYPE
+
+-- !!!!!!!
+SECURITY DEFINER SET search_path=pg_catalog
+-- !!!!!!
+
+LANGUAGE sql AS $body$
 INSERT INTO _trunklet.template(
       language_id
       , template_name
@@ -373,15 +379,26 @@ $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.template__remove(
   template_id _trunklet.template.template_id%TYPE
-) RETURNS void SECURITY DEFINER LANGUAGE sql AS $body$
+) RETURNS void
+
+-- !!!!!!!
+SECURITY DEFINER SET search_path=pg_catalog
+-- !!!!!!
+
+LANGUAGE sql AS $body$
 DELETE FROM _trunklet.template WHERE template_id = $1
 $body$;
 CREATE OR REPLACE FUNCTION trunklet.template__remove(
-  language_name _trunklet.language.language_name%TYPE
-  , template_name _trunklet.template.template_name%TYPE
+  template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE DEFAULT 1
-) RETURNS void SECURITY DEFINER LANGUAGE sql AS $body$
-SELECT trunklet.template__remove( (_trunklet.template__get( $1, $2, $3 )).template_id )
+) RETURNS void
+
+-- !!!!!!!
+SECURITY DEFINER SET search_path=pg_catalog
+-- !!!!!!
+
+LANGUAGE sql AS $body$
+SELECT trunklet.template__remove( (_trunklet.template__get( template_name, template_version )).template_id )
 $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.template__dependency__add(
@@ -449,12 +466,16 @@ BEGIN
 END
 $body$;
 
-CREATE OR REPLACE FUNCTION trunklet.process(
+CREATE OR REPLACE FUNCTION trunklet.process_language(
   language_name _trunklet.language.language_name%TYPE
   , template variant.variant(trunklet_template)
   , parameters variant.variant(trunklet_parameter)
 ) RETURNS text LANGUAGE plpgsql
-  SECURITY DEFINER SET search_path = pg_catalog
+
+-- !!!!!!!
+SECURITY DEFINER SET search_path = pg_catalog
+-- !!!!!!!
+
 AS $body$
 DECLARE
 /*
@@ -475,7 +496,7 @@ BEGIN
    * template.
    */
   IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
-    v_template := _trunklet.template__get( language_name, template::text, loose := true );
+    v_template := _trunklet.template__get( template::text, loose := true );
   END IF;
   IF v_template IS NULL THEN
     v_template.template := template;
@@ -503,30 +524,43 @@ END
 $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.process(
-  language_name _trunklet.language.language_name%TYPE
-  , template_name _trunklet.template.template_name%TYPE
+  template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
   , parameters variant.variant(trunklet_parameter)
 ) RETURNS text LANGUAGE SQL
-  SECURITY DEFINER SET search_path = pg_catalog
+-- !!!
+SECURITY DEFINER SET search_path = pg_catalog
+-- !!!
 AS $body$
-/*
- * !!!!! SECURITY DEFINER !!!!!
- */
-SELECT trunklet.process(
-    language_name
-    , (_trunklet.template__get( language_name, template_name, template_version )).template
-    , parameters
-  )
+SELECT trunklet.process_language(
+      (_trunklet.language__get(language_id)).language_name
+      , template
+      , parameters
+    )
+  FROM _trunklet.template__get( template_name, template_version )
 $body$;
-/*
+
 CREATE OR REPLACE FUNCTION trunklet.process(
-  language_name _trunklet.language.language_name%TYPE
-  , template_name _trunklet.template.template_name%TYPE
+  template_name _trunklet.template.template_name%TYPE
   , parameters variant.variant(trunklet_parameter)
 ) RETURNS text LANGUAGE SQL AS $body$
-SELECT trunklet.process( language_name, template_name, 1, parameters )
+SELECT trunklet.process( template_name, 1, parameters )
 $body$;
+
+
+
+
+/*
+ * trunklet.extract_parameters()
+ */
+
+/*
+CREATE OR REPLACE FUNCTION trunklet.extract_parameters(
+  template_name text
+  --[, template_version int]
+  , parameters variant(trunklet_parameter)
+  , extract_list text[]
+) RETURNS variant(trunklet_parameter)
 */
 
 -- vi: expandtab sw=2 ts=2
