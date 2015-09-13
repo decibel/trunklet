@@ -24,7 +24,7 @@ test		 = $(shell test $(1) $(2) $(3) && echo yes || echo no)
 GE91		 = $(call test, $(MAJORVER), -ge, 91)
 
 ifeq ($(GE91),yes)
-all: sql/$(EXTENSION)--$(EXTVERSION).sql
+all: deps sql/$(EXTENSION)--$(EXTVERSION).sql
 
 sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
 	cp $< $@
@@ -39,8 +39,35 @@ include $(PGXS)
 # Don't have installcheck bomb on error
 .IGNORE: installcheck
 
+#
+# OTHER DEPS
+#
+.PHONY: deps
+deps: variant
+
+.PHONY: variant
+variant: $(DESTDIR)$(datadir)/extension/variant.control
+
+$(DESTDIR)$(datadir)/extension/variant.control:
+	pgxn install variant --unstable
+
+#
+# pgtap
+#
+.PHONY: pgtap
+pgtap: $(DESTDIR)$(datadir)/extension/pgtap.control
+
+$(DESTDIR)$(datadir)/extension/pgtap.control:
+	pgxn install pgtap
+
+#
+# testdeps
+#
+.PHONY: testdeps
+testdeps: pgtap deps
+
 .PHONY: test
-test: clean install installcheck
+test: clean testdeps install installcheck
 	@if [ -r regression.diffs ]; then cat regression.diffs; fi
 
 .PHONY: results
@@ -48,7 +75,9 @@ results: test
 	rsync -rlpgovP results/ test/expected
 
 rmtag:
+	git fetch origin # Update our remotes
 	@test -z "$$(git branch --list $(EXTVERSION))" || git branch -d $(EXTVERSION)
+	@test -z "$$(git branch --list -r origin/$(EXTVERSION))" || git push --delete origin $(EXTVERSION)
 
 tag:
 	@test -z "$$(git status --porcelain)" || (echo 'Untracked changes!'; echo; git status; exit 1)
