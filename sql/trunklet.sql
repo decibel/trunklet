@@ -149,7 +149,6 @@ CREATE OR REPLACE FUNCTION _trunklet.create_language_function(
   language_id _trunklet.language.language_id%TYPE
   , language_name _trunklet.language.language_name%TYPE
   , return_type text
-  , function_arguments text
   , function_options text
   , function_body text
   , function_type text
@@ -158,10 +157,12 @@ DECLARE
   func_name CONSTANT text := _trunklet.function_name( language_id, function_type );
   func_full_name CONSTANT text := format(
     -- Name template
-    $name$_trunklet_functions.%1$s(%s)
+    $name$_trunklet_functions.%1$s(
+    template variant.variant(trunklet_template)
+    , parameters variant.variant(trunklet_parameter)
+  )
     $name$
     , func_name
-    , function_arguments
   );
 
 BEGIN
@@ -268,10 +269,6 @@ BEGIN
     language_id
     , language_name
     , 'text'
-    , $args$
-    template variant.variant(trunklet_template)
-    , parameters variant.variant(trunklet_parameter)
-$args$
     , process_function_options
     , process_function_body
     , 'process'
@@ -281,10 +278,6 @@ $args$
     language_id
     , language_name
     , 'variant.variant(trunklet_parameter)'
-    , $args$
-    parameters variant.variant(trunklet_parameter)
-    , extract_list text[]
-$args$
     , extract_parameters_options
     , extract_parameters_body
     , 'extract_parameters'
