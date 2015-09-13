@@ -168,7 +168,13 @@ BEGIN
 END
 $process$
       , extract_parameters_options := 'LANGUAGE sql'
-      , extract_parameters_body := $extract$SELECT ''::text::variant.variant$extract$
+      , extract_parameters_body := $extract$
+SELECT array(
+    SELECT (parameters::text[])[i]
+      FROM generate_subscripts( parameters::text[], 1 ) i
+      WHERE i = ANY( extract_list::int[] )
+  )::variant.variant
+$extract$
     );
   EXCEPTION
     -- TODO: incorrect return value
@@ -898,29 +904,20 @@ $body$;
 CREATE FUNCTION test_extract_parameters
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
+  c_original_role CONSTANT name := current_user;
   lname CONSTANT text := get_test_language_name();
   lid CONSTANT int := get_test_language_id();
-  test CONSTANT text := $$SELECT trunklet.execute( %L, %L, %L )$$;
-  template_name CONSTANT text := 'extract template';
-  template_body CONSTANT text := $template$('{%s,%s,%s}')[2]$template$;
 BEGIN
-  RETURN NEXT lives_ok(
-    format( $$SELECT trunklet.template__add( %L, %L, any_to_trunklet_template(%L::text) )$$
-      , lname
-      , template_name
-      , template_body
-    )
-    , 'Create extract template'
-  );
 
+  RETURN QUERY SELECT create_test_role();
   DECLARE
     v_context text;
     v_hint text;
     v_detail text;
   BEGIN
     RETURN NEXT is(
-      trunklet.extract_parameters( template_name, 1, any_to_trunklet_parameter('{cow,goes,moo}'::text[]) )
-      , any_to_trunklet_parameter(array['goes'::text])
+      trunklet.extract_parameters( lname, any_to_trunklet_parameter('{cow,goes,moo}'::text[]), '{2}' )::text[]
+      , array['goes'::text]
     );
   EXCEPTION
     WHEN others THEN
@@ -934,6 +931,7 @@ BEGIN
           , DETAIL = v_detail
       ;
   END;
+  RETURN QUERY SELECT _trunklet_test.drop_test_role(c_original_role);
 END
 $body$;
 

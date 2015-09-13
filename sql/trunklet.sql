@@ -511,7 +511,7 @@ BEGIN
   END IF;
 
 
-  -- Can't do this during DECLARE
+  -- Can't do this during DECLARE (0A000: default value for row or record variable is not supported)
   r_language := _trunklet.language__get( language_name );
 
 /*
@@ -562,28 +562,44 @@ $body$;
  * trunklet.extract_parameters()
  */
 CREATE OR REPLACE FUNCTION trunklet.extract_parameters(
-  extract_template_name text
-  , extract_template_version int
+  language_name _trunklet.language.language_name%TYPE
   , parameters variant.variant(trunklet_parameter)
-) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql AS $body$
+  , extract_list text[]
+) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql
+
+-- !!!!!!!
+SECURITY DEFINER SET search_path = pg_catalog
+-- !!!!!!!
+
+AS $body$
 DECLARE
+  r_language _trunklet.language;
+
   sql text;
   v_return variant.variant(trunklet_parameter);
 BEGIN
-  sql := $$SELECT trunklet.process( $1, $2, $3::variant.variant(trunklet_parameter) )::$$
-      || ( _trunklet.language__get(
-            (_trunklet.template__get( extract_template_name, extract_template_version )).language_id
-        ) ).parameter_type
-  ;
-  RAISE DEBUG 'EXECUTE % USING %, %, %'
+  -- Can't do this during DECLARE (0A000: default value for row or record variable is not supported)
+  r_language := _trunklet.language__get( language_name );
+
+  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, variant.original_type(parameters), 'parameter' );
+
+  sql := format(
+    'SELECT _trunklet_functions.%s( $1, $2 )'
+    , _trunklet.function_name( r_language.language_id, 'extract_parameters' )
+  );
+  RAISE DEBUG 'EXECUTE % USING %, %'
     , sql
-    , extract_template_name, extract_template_version, parameters
+    , parameters, extract_list
   ;
-  EXECUTE sql INTO v_return USING extract_template_name, extract_template_version, parameters;
+  EXECUTE sql
+    INTO STRICT v_return
+    USING parameters, extract_list
+  ;
 
   RETURN v_return;
 END
 $body$;
+
 
 
 -- vi: expandtab sw=2 ts=2
