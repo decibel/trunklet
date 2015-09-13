@@ -725,6 +725,53 @@ END
 $body$;
 
 
+CREATE FUNCTION create_test_role
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_test_role CONSTANT name := 'Completely bogus trunklet test role';
+BEGIN
+  RETURN NEXT lives_ok(
+    format( 'CREATE ROLE %I', c_test_role )
+    , 'Create test role'
+  );
+  RETURN NEXT lives_ok(
+    format( 'GRANT USAGE ON SCHEMA _trunklet_test TO %I', c_test_role )
+    , 'Grant test role USAGE on test schema'
+  );
+  RETURN NEXT lives_ok(
+    format( 'SET LOCAL ROLE = %I', c_test_role )
+    , 'Change to test role'
+  );
+  RETURN NEXT is(
+    current_user
+    , c_test_role
+    , 'Verify role change' -- Roles in functions are finicky enough this is worth testing for
+  );
+  RAISE DEBUG 'current_user = %, search_path = %', current_user, current_setting('search_path');
+END
+$body$;
+CREATE FUNCTION drop_test_role(
+  original_role name
+) RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_test_role CONSTANT name := 'Completely bogus trunklet test role';
+BEGIN
+  RETURN NEXT lives_ok(
+    format( 'SET LOCAL ROLE = %I', original_role )
+    , 'Change back to original role'
+  );
+  -- If we don't do this we may not be able to drop the role
+  RETURN NEXT lives_ok(
+    format( 'REVOKE USAGE ON SCHEMA _trunklet_test FROM %I', c_test_role )
+    , 'Revoke test role USAGE on test schema'
+  );
+  RETURN NEXT lives_ok(
+    format( 'DROP ROLE %I', c_test_role )
+    , 'Drop test role'
+  );
+END
+$body$;
+
 
 /*
  * FUNCTION trunklet.process
@@ -737,7 +784,6 @@ DECLARE
   test CONSTANT text := replace( test_l, '_language', '' );
   template_name CONSTANT text := 'test template';
   p CONSTANT text := 'trunklet.process(): ';
-  c_test_role CONSTANT name := 'Completely bogus trunklet test role';
   c_original_role CONSTANT name := current_user;
 BEGIN
   PERFORM get_test_language_id();
@@ -802,20 +848,7 @@ BEGIN
     , 'Create predefined templates'
   );
 
-  RETURN NEXT lives_ok(
-    format( 'CREATE ROLE %I', c_test_role )
-    , 'Create test role'
-  );
-  RETURN NEXT lives_ok(
-    format( 'SET LOCAL ROLE = %I', c_test_role )
-    , 'Change to test role'
-  );
-  RETURN NEXT is(
-    current_user
-    , c_test_role
-    , 'Verify role change' -- Roles in functions are finicky enough this is worth testing for
-  );
-  RAISE DEBUG 'current_user = %, search_path = %', current_user, current_setting('search_path');
+  RETURN QUERY SELECT create_test_role();
 
   RETURN QUERY
     SELECT is(
@@ -855,14 +888,7 @@ BEGIN
       RAISE WARNING 'Caught exception %: %', SQLSTATE, SQLERRM;
   END;
 
-  RETURN NEXT lives_ok(
-    format( 'SET LOCAL ROLE = %I', c_original_role )
-    , 'Change back to original role'
-  );
-  RETURN NEXT lives_ok(
-    format( 'DROP ROLE %I', c_test_role )
-    , 'Drop test role'
-  );
+  RETURN QUERY SELECT _trunklet_test.drop_test_role(c_original_role);
 END
 $body$;
 
