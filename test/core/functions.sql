@@ -866,6 +866,50 @@ BEGIN
 END
 $body$;
 
+/*
+ * FUNCTION trunklet.extract_parameters
+ */
+CREATE FUNCTION test_extract_parameters
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  lname CONSTANT text := get_test_language_name();
+  lid CONSTANT int := get_test_language_id();
+  test CONSTANT text := $$SELECT trunklet.execute( %L, %L, %L )$$;
+  template_name CONSTANT text := 'extract template';
+  template_body CONSTANT text := $template$('{%s,%s,%s}')[2]$template$;
+BEGIN
+  RETURN NEXT lives_ok(
+    format( $$SELECT trunklet.template__add( %L, %L, any_to_trunklet_template(%L::text) )$$
+      , lname
+      , template_name
+      , template_body
+    )
+    , 'Create extract template'
+  );
+
+  DECLARE
+    v_context text;
+    v_hint text;
+    v_detail text;
+  BEGIN
+    RETURN NEXT is(
+      trunklet.extract_parameters( template_name, 1, any_to_trunklet_parameter('{cow,goes,moo}'::text[]) )
+      , any_to_trunklet_parameter(array['goes'::text])
+    );
+  EXCEPTION
+    WHEN others THEN
+      GET STACKED DIAGNOSTICS
+        v_context = PG_EXCEPTION_CONTEXT
+        , v_hint = PG_EXCEPTION_HINT
+        , v_detail = PG_EXCEPTION_DETAIL
+      ;
+      RAISE WARNING E'Caught exception %: %\nCONTEXT: %', SQLSTATE, SQLERRM, v_context
+        USING HINT = v_hint
+          , DETAIL = v_detail
+      ;
+  END;
+END
+$body$;
 
 /*
  * FUNCTION trunklet.execute

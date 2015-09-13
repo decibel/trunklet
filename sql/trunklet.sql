@@ -20,6 +20,7 @@ END
 $do$;
 
 -- Register our variants. Do IS NOT NULL for consistent test output in the build test
+-- TODO: Setup a command trigger to undo this on DROP EXTENSION
 SELECT variant.register( 'trunklet_template', '{}', true ) IS NOT NULL;
 SELECT variant.register( 'trunklet_parameter', '{}' ) IS NOT NULL;
 SELECT variant.register( 'trunklet_return', '{}' ) IS NOT NULL;
@@ -553,14 +554,29 @@ $body$;
 /*
  * trunklet.extract_parameters()
  */
-
-/*
 CREATE OR REPLACE FUNCTION trunklet.extract_parameters(
-  template_name text
-  --[, template_version int]
-  , parameters variant(trunklet_parameter)
-  , extract_list text[]
-) RETURNS variant(trunklet_parameter)
-*/
+  extract_template_name text
+  , extract_template_version int
+  , parameters variant.variant(trunklet_parameter)
+) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql AS $body$
+DECLARE
+  sql text;
+  v_return variant.variant(trunklet_parameter);
+BEGIN
+  sql := $$SELECT trunklet.process( $1, $2, $3::variant.variant(trunklet_parameter) )::$$
+      || ( _trunklet.language__get(
+            (_trunklet.template__get( extract_template_name, extract_template_version )).language_id
+        ) ).parameter_type
+  ;
+  RAISE DEBUG 'EXECUTE % USING %, %, %'
+    , sql
+    , extract_template_name, extract_template_version, parameters
+  ;
+  EXECUTE sql INTO v_return USING extract_template_name, extract_template_version, parameters;
+
+  RETURN v_return;
+END
+$body$;
+
 
 -- vi: expandtab sw=2 ts=2
