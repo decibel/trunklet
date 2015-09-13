@@ -491,8 +491,8 @@ DECLARE
  */
   c_template_regtype CONSTANT regtype := variant.original_type(template);
 
-  v_language _trunklet.language;
-  v_template _trunklet.template;
+  r_language _trunklet.language;
+  r_template _trunklet.template;
   sql text;
   v_return text;
 BEGIN
@@ -504,27 +504,27 @@ BEGIN
    * template.
    */
   IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
-    v_template := _trunklet.template__get( template::text, loose := true );
+    r_template := _trunklet.template__get( template::text, loose := true );
   END IF;
-  IF v_template IS NULL THEN
-    v_template.template := template;
+  IF r_template IS NULL THEN
+    r_template.template := template;
   END IF;
 
 
   -- Can't do this during DECLARE
-  v_language := _trunklet.language__get( language_name );
+  r_language := _trunklet.language__get( language_name );
 
 /*
  * !!!!! SECURITY DEFINER !!!!!
  */
-  PERFORM _trunklet.verify_type( language_name, v_language.template_type, c_template_regtype, 'template' );
-  PERFORM _trunklet.verify_type( language_name, v_language.parameter_type, variant.original_type(parameters), 'parameter' );
+  PERFORM _trunklet.verify_type( language_name, r_language.template_type, c_template_regtype, 'template' );
+  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, variant.original_type(parameters), 'parameter' );
 
   sql := format(
     'SELECT _trunklet_functions.%s( $1, $2 )'
-    , _trunklet.function_name( v_language.language_id, 'process' )
+    , _trunklet.function_name( r_language.language_id, 'process' )
   );
-  EXECUTE sql INTO STRICT v_return USING v_template.template, parameters;
+  EXECUTE sql INTO STRICT v_return USING r_template.template, parameters;
   RAISE DEBUG '% returned %', sql, v_return;
 
   RETURN v_return;
