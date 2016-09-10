@@ -76,14 +76,14 @@ ok 6 - _trunklet_test.test_process
     1..4
 ok 7 - _trunklet_test.test_schemas
     # Subtest: _trunklet_test.test_secdef_privs()
-    ok 1 - Verify acl for trunklet.template__add(character varying,text,integer,variant.variant)
-    ok 2 - Verify acl for trunklet.template__remove(integer)
+    ok 1 - Verify acl for trunklet.template__remove(integer)
+    ok 2 - Verify acl for trunklet.template__add(character varying,text,integer,variant.variant)
     ok 3 - Verify acl for trunklet.template__remove(text,integer)
     ok 4 - Verify acl for trunklet.process_language(character varying,variant.variant,variant.variant)
     ok 5 - Verify acl for trunklet.process(text,integer,variant.variant)
     ok 6 - Verify acl for trunklet.extract_parameters(character varying,variant.variant,text[])
-    ok 7 - Verify search_path for trunklet.template__add(character varying,text,integer,variant.variant)
-    ok 8 - Verify search_path for trunklet.template__remove(integer)
+    ok 7 - Verify search_path for trunklet.template__remove(integer)
+    ok 8 - Verify search_path for trunklet.template__add(character varying,text,integer,variant.variant)
     ok 9 - Verify search_path for trunklet.template__remove(text,integer)
     ok 10 - Verify search_path for trunklet.process_language(character varying,variant.variant,variant.variant)
     ok 11 - Verify search_path for trunklet.process(text,integer,variant.variant)
