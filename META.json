@@ -16,7 +16,7 @@
     "name": "trunklet",
 
     "X_comment": "REQUIRED. Version of the distribution. http://pgxn.org/spec/#version",
-    "version": "0.1.0",
+    "version": "0.1.1",
 
     "X_comment": "REQUIRED. Short description of distribution.",
     "abstract": "A templating system for Postgres.",
@@ -41,7 +41,7 @@
             "file": "sql/trunklet.sql",
 
             "X_comment": "REQUIRED. Version the extension is at.",
-            "version": "0.1.0",
+            "version": "0.1.1",
 
             "X_comment": "Optional: \"abstract\": Description of the extension.",
             "abstract": "A templating system for Postgres. Elephants don't use templates, they use trunklets!",
