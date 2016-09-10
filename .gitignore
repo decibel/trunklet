@@ -1,21 +1,26 @@
-# Editor stuff
+# Editor files
 .*.swp
 
-# Build output
-*.so
+# Explicitly exclude META.json!
+!/META.json
+
+# Generated make files
+meta.mk
+
+# Compiler output
 *.o
+*.so
 .deps/
 
-# dist output
-/trunklet-*.zip
-
-/sql/trunklet--*
-!/sql/trunklet--*--*.sql
+# built targets
+/sql/*--*
+!/sql/*--*--*.sql
 
 # Test artifacts
 results/
 regression.diffs
 regression.out
 
-# Misc crap
+# Misc
 tmp/
+.DS_Store
