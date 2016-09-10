@@ -6,6 +6,8 @@ include pgxntool/base.mk
 .PHONY: deps
 deps: variant
 
+install: deps
+
 .PHONY: variant
 variant: $(DESTDIR)$(datadir)/extension/variant.control
 
