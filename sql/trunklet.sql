@@ -630,9 +630,8 @@ BEGIN
   PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, pg_catalog.pg_typeof(parameters), 'parameter' );
 
   sql := format(
-    'SELECT _trunklet_functions.%s( CAST($1 AS %s), CAST($2 AS %s) )::%s AS out'
+    'SELECT _trunklet_functions.%s( CAST($1 AS %s), $2 )::%s AS out'
     , _trunklet.function_name( r_language.language_id, 'extract_parameters' )
-    , r_language.parameter_type
     , r_language.parameter_type
     , pg_typeof(parameters)
   );

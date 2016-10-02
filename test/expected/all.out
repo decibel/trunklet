@@ -32,10 +32,11 @@ ok 3 - _trunklet_test.test__table_template
     ok 3 - Change to test role
     ok 4 - Verify role change
     ok 5
-    ok 6 - Change back to original role
-    ok 7 - Revoke test role USAGE on test schema
-    ok 8 - Drop test role
-    1..8
+    ok 6 - test extract of json values
+    ok 7 - Change back to original role
+    ok 8 - Revoke test role USAGE on test schema
+    ok 9 - Drop test role
+    1..9
 ok 4 - _trunklet_test.test_extract_parameters
     # Subtest: _trunklet_test.test_language__get_id()
     ok 1 - language__get_id: returns correct id
@@ -43,29 +44,30 @@ ok 4 - _trunklet_test.test_extract_parameters
     1..2
 ok 5 - _trunklet_test.test_language__get_id
     # Subtest: _trunklet_test.test_process()
-    ok 1 - trunklet.process(): invalid language
-    ok 2 - trunklet.process(): invalid parameter
-    ok 3 - Create test view
-    ok 4 - Create predefined templates
-    ok 5 - Create test role
-    ok 6 - Grant test role USAGE on test schema
-    ok 7 - Change to test role
-    ok 8 - Verify role change
-    ok 9 - trunklet.process_language( ..., '%s', '{a}' )
-    ok 10 - trunklet.process_language( ..., '%s %s', '{a,b}' )
-    ok 11 - trunklet.process_language( ..., '%s %s', '{a,NULL}' )
-    ok 12 - trunklet.process_language( ..., '%s', '{NULL}' )
-    ok 13 - trunklet.process_language( ..., 'moo', NULL )
-    ok 14 - trunklet.process( 'test template', '{a}' )
-    ok 15 - trunklet.process( 'test template', '1', '{a}' )
-    ok 16 - trunklet.process( 'test template', '2', '{a,b}' )
-    ok 17 - trunklet.process( 'test template', '3', '{a,NULL}' )
-    ok 18 - trunklet.process( 'test template', '4', '{NULL}' )
-    ok 19 - trunklet.process( 'test template', '5', NULL )
-    ok 20 - Change back to original role
-    ok 21 - Revoke test role USAGE on test schema
-    ok 22 - Drop test role
-    1..22
+    ok 1
+    ok 2 - trunklet.process(): invalid language
+    ok 3 - trunklet.process(): invalid parameter
+    ok 4 - Create test view
+    ok 5 - Create predefined templates
+    ok 6 - Create test role
+    ok 7 - Grant test role USAGE on test schema
+    ok 8 - Change to test role
+    ok 9 - Verify role change
+    ok 10 - trunklet.process_language( ..., '%s', '{a}' )
+    ok 11 - trunklet.process_language( ..., '%s %s', '{a,b}' )
+    ok 12 - trunklet.process_language( ..., '%s %s', '{a,NULL}' )
+    ok 13 - trunklet.process_language( ..., '%s', '{NULL}' )
+    ok 14 - trunklet.process_language( ..., 'moo', NULL )
+    ok 15 - trunklet.process( 'test template', '{a}' )
+    ok 16 - trunklet.process( 'test template', '1', '{a}' )
+    ok 17 - trunklet.process( 'test template', '2', '{a,b}' )
+    ok 18 - trunklet.process( 'test template', '3', '{a,NULL}' )
+    ok 19 - trunklet.process( 'test template', '4', '{NULL}' )
+    ok 20 - trunklet.process( 'test template', '5', NULL )
+    ok 21 - Change back to original role
+    ok 22 - Revoke test role USAGE on test schema
+    ok 23 - Drop test role
+    1..23
 ok 6 - _trunklet_test.test_process
     # Subtest: _trunklet_test.test_schemas()
     ok 1 - Role public should be granted USAGE on schema trunklet

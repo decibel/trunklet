@@ -146,7 +146,8 @@ $body$;
 CREATE FUNCTION bogus_language_name(
 ) RETURNS text LANGUAGE sql AS $$SELECT 'bogus template language that does not exist'::text$$;
 CREATE FUNCTION get_test_language_name(
-) RETURNS text LANGUAGE sql AS $$SELECT 'Our internal test language'::text$$;
+  langtype text DEFAULT 'text'
+) RETURNS text LANGUAGE sql AS $$SELECT format('Our internal %s test language', langtype)$$;
 CREATE FUNCTION get_test_language_id(
 ) RETURNS int LANGUAGE plpgsql AS $body$
 BEGIN
@@ -175,6 +176,52 @@ SELECT array(
       FROM generate_subscripts( parameters::text[], 1 ) i
       WHERE i = ANY( extract_list::int[] )
   )--::variant.variant
+$extract$
+    );
+  EXCEPTION
+    -- TODO: incorrect return value
+    WHEN no_data_found OR unique_violation THEN
+      NULL;
+  END;
+  RETURN _trunklet.language__get_id( get_test_language_name() );
+END
+$body$;
+
+CREATE FUNCTION get_json_language_id(
+) RETURNS int LANGUAGE plpgsql AS $body$
+BEGIN
+  BEGIN
+    --SET LOCAL client_min_messages = debug;
+  PERFORM trunklet.template_language__add(
+      get_test_language_name('json')
+      , parameter_type := 'jsonb'
+      , template_type := 'json'
+      , process_function_options := 'LANGUAGE plpgsql'
+      , process_function_body := $process$
+DECLARE
+  k text;
+  v text;
+
+  v_replace text;
+  v_return text := template::text;
+BEGIN
+  FOR k,v IN
+    SELECT key, parameters->>key FROM jsonb_object_keys(parameters) key
+  LOOP
+    v_replace := format('!%s!', k);
+    RAISE DEBUG 'replacing all occurences of % with %', v_replace, v;
+    v_return := replace( v_return, v_replace, v );
+  END LOOP;
+  RETURN v_return::json;
+END
+$process$
+      , extract_parameters_options := 'LANGUAGE sql'
+      , extract_parameters_body := $extract$
+SELECT jsonb_object(keys, values) FROM (
+    SELECT array_agg(k) AS keys, array_agg(parameters->>k) AS values
+      FROM jsonb_object_keys(parameters) k
+      WHERE k = ANY( extract_list )
+  ) a
 $extract$
     );
   EXCEPTION
@@ -813,6 +860,24 @@ BEGIN
   PERFORM get_test_language_id();
   --PERFORM variant.add_type( 'trunklet_template', 'varchar' );
 
+  -- Simple test of the JSON template
+  PERFORM get_json_language_id();
+  RETURN NEXT is(
+      trunklet.process_language(
+        get_test_language_name('json')
+        , '{
+    "template1": "!replace_1!",
+    "template!replace_2!": true,
+    "template!replace_3!": null
+            }'::json::text -- Need to force template to text
+        , '{ "replace_1": "1", "replace_2": 2, "replace_3": 3 }'::jsonb
+      )
+      , '{
+    "template1": "1",
+    "template2": true,
+    "template3": null
+            }'::json::text -- Need to cast back to text for is()
+  );
   RETURN NEXT throws_ok(
     format( test_l, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
     , 'P0002'
@@ -930,8 +995,13 @@ CREATE FUNCTION test_extract_parameters
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   c_original_role CONSTANT name := current_user;
+
   lname CONSTANT text := get_test_language_name();
   lid CONSTANT int := get_test_language_id();
+
+  jname CONSTANT text := get_test_language_name('json');
+  jid CONSTANT int := get_json_language_id();
+
 BEGIN
 
   RETURN QUERY SELECT create_test_role();
@@ -944,6 +1014,16 @@ BEGIN
       trunklet.extract_parameters( lname, --any_to_trunklet_parameter
           ('{cow,goes,moo}'::text[]), '{2}' )::text[]
       , array['goes'::text]
+    );
+
+    RETURN NEXT is(
+      trunklet.extract_parameters(
+        jname --any_to_trunklet_parameter
+        , '{ "moo": "cow", "null": null, "number": 1, "string": "text", "boolean": true }'::jsonb
+        , array['null', 'number', 'string', 'boolean']
+      )
+      , '{ "null": null, "number": "1", "string": "text", "boolean": "true" }'::jsonb -- Our idiot implementation can't handle json types
+      , 'test extract of json values'
     );
   EXCEPTION
     WHEN others THEN
