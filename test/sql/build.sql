@@ -1,5 +1,5 @@
 \set ECHO none
-CREATE EXTENSION IF NOT EXISTS variant;
+--CREATE EXTENSION IF NOT EXISTS variant;
 
 \i test/helpers/psql.sql
 

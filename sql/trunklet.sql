@@ -19,12 +19,6 @@ EXCEPTION
 END
 $do$;
 
--- Register our variants. Do IS NOT NULL for consistent test output in the build test
--- TODO: Setup a command trigger to undo this on DROP EXTENSION
-SELECT variant.register( 'trunklet_template', '{}', true ) IS NOT NULL;
-SELECT variant.register( 'trunklet_parameter', '{}' ) IS NOT NULL;
-SELECT variant.register( 'trunklet_return', '{}' ) IS NOT NULL;
-
 CREATE SCHEMA _trunklet;
 GRANT USAGE ON SCHEMA _trunklet TO trunklet__dependency;
 COMMENT ON SCHEMA _trunklet IS $$Internal use functions for the trunklet extension.$$;
@@ -121,12 +115,28 @@ CREAtE OR REPLACE FUNCTION _trunklet.verify_type(
   , which_type text
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
+  sql text;
 BEGIN
+  /* Old variant code
   IF supplied_type <> allowed_type THEN
     RAISE EXCEPTION '%s for language "%" must by of type "%"', which_type, language_name, allowed_type
       USING ERRCODE = 'data_exception'
     ;
   END IF;
+  */
+
+  /*
+   * This isn't strictly the same as what we previously did with variant. In
+   * this version, we just verify that you can cast from one type to the next.
+   * I think that's probably good enough.
+   */
+  sql := format(
+    $$SELECT CAST( CAST( NULL AS %s ) AS %s )$$
+    , supplied_type
+    , allowed_type
+  );
+  RAISE DEBUG 'sql = %', sql;
+  EXECUTE sql;
 END
 $body$;
 
@@ -255,24 +265,18 @@ BEGIN
     INTO STRICT fn.language_id
   ;
 
-  RAISE DEBUG 'variant.variant(trunklet_template) allowed types: %'
-    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_template', template_type::text ) ), ', ' )
-  ;
-  RAISE DEBUG 'variant.variant(trunklet_parameter) allowed types: %'
-    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_parameter', parameter_type::text ) ), ', ' )
-  ;
-  RAISE DEBUG 'variant.variant(trunklet_return) allowed types: %'
-    , array_to_string( array( SELECT * FROM variant.add_type( 'trunklet_return', parameter_type::text ) ), ', ' )
-  ;
-
   PERFORM _trunklet.create_language_function(
     language_id
     , language_name
     , 'text'
-    , $args$
-    template variant.variant(trunklet_template)
-    , parameters variant.variant(trunklet_parameter)
+    , format(
+      $args$
+    template %s
+    , parameters %s
 $args$
+      , template_type
+      , parameter_type
+    )
     , process_function_options
     , process_function_body
     , 'process'
@@ -281,11 +285,14 @@ $args$
   PERFORM _trunklet.create_language_function(
     language_id
     , language_name
-    , 'variant.variant(trunklet_parameter)'
-    , $args$
-    parameters variant.variant(trunklet_parameter)
+    , parameter_type::text
+    , format(
+      $args$
+    parameters %s
     , extract_list text[]
 $args$
+      , parameter_type
+    )
     , extract_parameters_options
     , extract_parameters_body
     , 'extract_parameters'
@@ -312,7 +319,7 @@ CREATE TABLE _trunklet.template(
   , language_id int NOT NULL REFERENCES _trunklet.language
   , template_name text NOT NULL CHECK(_trunklet.name_sanity( 'template_name', template_name ))
   , template_version int NOT NULL
-  , template variant.variant(trunklet_template) NOT NULL
+  , template text NOT NULL -- TODO: Trigger to ensure template will cast to intended type
   , CONSTRAINT template__u_template_name__template_version UNIQUE( template_name, template_version )
 );
 GRANT REFERENCES ON _trunklet.template TO trunklet__dependency;
@@ -476,8 +483,8 @@ $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.process_language(
   language_name _trunklet.language.language_name%TYPE
-  , template variant.variant(trunklet_template)
-  , parameters variant.variant(trunklet_parameter)
+  , template text
+  , parameters anyelement
 ) RETURNS text LANGUAGE plpgsql
 
 -- !!!!!!!
@@ -489,7 +496,7 @@ DECLARE
 /*
  * !!!!! SECURITY DEFINER !!!!!
  */
-  c_template_regtype CONSTANT regtype := variant.original_type(template);
+  --c_template_regtype CONSTANT regtype := variant.original_type(template);
 
   r_language _trunklet.language;
   r_template _trunklet.template;
@@ -503,9 +510,9 @@ BEGIN
    * with that name. If we do, use it; otherwise treat "template" as an actual
    * template.
    */
-  IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
-    r_template := _trunklet.template__get( template::text, loose := true );
-  END IF;
+  --IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
+  r_template := _trunklet.template__get( template::text, loose := true );
+  --END IF;
   IF r_template IS NULL THEN
     r_template.template := template;
   END IF;
@@ -517,24 +524,40 @@ BEGIN
 /*
  * !!!!! SECURITY DEFINER !!!!!
  */
-  PERFORM _trunklet.verify_type( language_name, r_language.template_type, c_template_regtype, 'template' );
-  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, variant.original_type(parameters), 'parameter' );
+  PERFORM _trunklet.verify_type( language_name, r_language.template_type, pg_catalog.pg_typeof(template), 'template' );
+  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, pg_catalog.pg_typeof(parameters), 'parameter' );
 
   sql := format(
-    'SELECT _trunklet_functions.%s( $1, $2 )'
+    'SELECT _trunklet_functions.%s( CAST($1 AS %s), CAST($2 AS %s) )'
     , _trunklet.function_name( r_language.language_id, 'process' )
+    , r_language.template_type
+    , r_language.parameter_type
   );
+  RAISE DEBUG E'execute %\nUSING %, %', sql, r_template.template, parameters;
   EXECUTE sql INTO STRICT v_return USING r_template.template, parameters;
   RAISE DEBUG '% returned %', sql, v_return;
 
   RETURN v_return;
 END
 $body$;
+/*
+CREATE OR REPLACE FUNCTION trunklet.process_language(
+  language_name _trunklet.language.language_name%TYPE
+  , template text
+  , parameters anyarray
+) RETURNS text LANGUAGE sql AS $body$
+SELECT trunklet.process_language(
+  language_name
+  , template
+  , parameters::text
+)
+$body$;
+*/
 
 CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
-  , parameters variant.variant(trunklet_parameter)
+  , parameters anyelement
 ) RETURNS text LANGUAGE SQL
 -- !!!
 SECURITY DEFINER SET search_path = pg_catalog
@@ -547,14 +570,37 @@ SELECT trunklet.process_language(
     )
   FROM _trunklet.template__get( template_name, template_version )
 $body$;
+/*
+CREATE OR REPLACE FUNCTION trunklet.process(
+  template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE
+  , parameters anyarray
+) RETURNS text LANGUAGE SQL AS $body$
+SELECT trunklet.process(
+  template_name
+  , template_version
+  , parameters::text
+)
+$body$;
+*/
 
 CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
-  , parameters variant.variant(trunklet_parameter)
+  , parameters anyelement
 ) RETURNS text LANGUAGE SQL AS $body$
 SELECT trunklet.process( template_name, 1, parameters )
 $body$;
-
+/*
+CREATE OR REPLACE FUNCTION trunklet.process(
+  template_name _trunklet.template.template_name%TYPE
+  , parameters anyarray
+) RETURNS text LANGUAGE SQL AS $body$
+SELECT trunklet.process(
+  template_name
+  , parameters::text
+)
+$body$;
+*/
 
 
 
@@ -563,9 +609,9 @@ $body$;
  */
 CREATE OR REPLACE FUNCTION trunklet.extract_parameters(
   language_name _trunklet.language.language_name%TYPE
-  , parameters variant.variant(trunklet_parameter)
+  , parameters anyelement
   , extract_list text[]
-) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql
+) RETURNS anyelement LANGUAGE plpgsql
 
 -- !!!!!!!
 SECURITY DEFINER SET search_path = pg_catalog
@@ -576,29 +622,52 @@ DECLARE
   r_language _trunklet.language;
 
   sql text;
-  v_return variant.variant(trunklet_parameter);
+  r record;
 BEGIN
   -- Can't do this during DECLARE (0A000: default value for row or record variable is not supported)
   r_language := _trunklet.language__get( language_name );
 
-  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, variant.original_type(parameters), 'parameter' );
+  PERFORM _trunklet.verify_type( language_name, r_language.parameter_type, pg_catalog.pg_typeof(parameters), 'parameter' );
 
   sql := format(
-    'SELECT _trunklet_functions.%s( $1, $2 )'
+    'SELECT _trunklet_functions.%s( CAST($1 AS %s), CAST($2 AS %s) )::%s AS out'
     , _trunklet.function_name( r_language.language_id, 'extract_parameters' )
+    , r_language.parameter_type
+    , r_language.parameter_type
+    , pg_typeof(parameters)
   );
   RAISE DEBUG 'EXECUTE % USING %, %'
     , sql
     , parameters, extract_list
   ;
   EXECUTE sql
-    INTO STRICT v_return
+    INTO STRICT r
     USING parameters, extract_list
   ;
 
-  RETURN v_return;
+  RETURN r.out;
 END
 $body$;
+/*
+CREATE OR REPLACE FUNCTION trunklet.extract_parameters(
+  language_name _trunklet.language.language_name%TYPE
+  , parameters anyarray
+  , extract_list text[]
+) RETURNS anyarray LANGUAGE plpgsql AS $body$
+DECLARE
+  r record;
+BEGIN
+  EXECUTE format(
+      $$SELECT trunklet.extract_parameters($1, $2, $3)::%s AS out$$
+      , pg_typeof(parameters)
+    )
+    INTO r 
+    USING language_name, parameters::text, extract_list
+  ;
+  RETURN r.out;
+END
+$body$;
+*/
 
 
 

@@ -151,6 +151,7 @@ CREATE FUNCTION get_test_language_id(
 ) RETURNS int LANGUAGE plpgsql AS $body$
 BEGIN
   BEGIN
+    --SET LOCAL client_min_messages = debug;
   PERFORM trunklet.template_language__add(
       get_test_language_name()
       , parameter_type := 'text[]'
@@ -173,7 +174,7 @@ SELECT array(
     SELECT (parameters::text[])[i]
       FROM generate_subscripts( parameters::text[], 1 ) i
       WHERE i = ANY( extract_list::int[] )
-  )::variant.variant
+  )--::variant.variant
 $extract$
     );
   EXCEPTION
@@ -303,6 +304,7 @@ BEGIN
     get_test_language_id() IS NOT NULL
     , 'Verify we can create test language'
   );
+  /*
   RETURN NEXT ok(
     EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_template' ) WHERE allowed_type = 'text'::regtype)
     , 'Verify type added to registered variant "trunklet_template"'
@@ -315,6 +317,7 @@ BEGIN
     EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_return' ) WHERE allowed_type = 'text[]'::regtype)
     , 'Verify type added to registered variant "trunklet_return"'
   );
+  */
 
   RETURN NEXT function_privs_are(
     'trunklet', 'template_language__add'
@@ -392,12 +395,20 @@ $body$;
  * cast text to variant during function compilation, before get_test_language_id
  * has allowed text as a type for that variant.
  */
+/*
 CREATE FUNCTION any_to_trunklet_template(
   anyelement
 ) RETURNS variant.variant(trunklet_template) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_template); END$$;
 CREATE FUNCTION any_to_trunklet_parameter(
   anyelement
 ) RETURNS variant.variant(trunklet_parameter) LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN $1::variant.variant(trunklet_parameter); END$$;
+*/
+CREATE FUNCTION any_to_trunklet_template(
+  anyelement
+) RETURNS text LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN quote_literal($1::text) || '::' || pg_typeof($1); END$$;
+CREATE FUNCTION any_to_trunklet_parameter(
+  anyelement
+) RETURNS text LANGUAGE plpgsql VOLATILE AS $$BEGIN RETURN quote_literal($1::text) || '::' || pg_typeof($1); END$$;
 CREATE FUNCTION get_test_templates(
 ) RETURNS int[] LANGUAGE plpgsql AS $body$
 DECLARE
@@ -410,8 +421,10 @@ BEGIN
     SELECT ids INTO ids FROM test_templates;
   EXCEPTION
     WHEN undefined_table THEN
-      ids[1] := trunklet.template__add( get_test_language_name(), 'test template', any_to_trunklet_template('test 1'::text) );
-      ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, any_to_trunklet_template('test 2'::text) );
+      ids[1] := trunklet.template__add( get_test_language_name(), 'test template', --any_to_trunklet_template
+        ('test 1'::text) );
+      ids[2] := trunklet.template__add( get_test_language_name(), 'test template', 2, --any_to_trunklet_template
+        ('test 2'::text) );
 
       -- See also test_template__remove
       CREATE TEMP TABLE test_templates AS VALUES(ids);
@@ -425,17 +438,22 @@ CREATE FUNCTION test_template__add
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   ids CONSTANT int[] := get_test_templates();
+  /*
   v_array_allowed CONSTANT boolean := 
     EXISTS(SELECT 1 FROM variant.allowed_types( 'trunklet_template' ) WHERE allowed_type = 'text[]'::regtype)
   ;
+  */
 BEGIN
---  RAISE WARNING 'v_array_allowed %', v_array_allowed;
+  /*
+  --RAISE WARNING 'v_array_allowed %', v_array_allowed;
   IF NOT v_array_allowed THEN
     PERFORM variant.add_type( 'trunklet_template', 'text[]' );
   END IF;
+  */
 
   RETURN NEXT throws_ok(
-    $$SELECT trunklet.template__add( bogus_language_name(), 'test_template', any_to_trunklet_template('test 1'::text) )$$
+    $$SELECT trunklet.template__add( bogus_language_name(), 'test_template', --any_to_trunklet_template
+      ('test 1'::text) )$$
     , format( 'language "%s" not found', bogus_language_name() )
     , 'Bogus language throws error'
   );
@@ -786,14 +804,14 @@ CREATE FUNCTION test_process
 () RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   lname CONSTANT text := get_test_language_name();
-  test_l CONSTANT text := $$SELECT trunklet.process_language( %L, %L, %L )$$;
+  test_l CONSTANT text := $$SELECT trunklet.process_language( %L, %s, %s )$$;
   test CONSTANT text := replace( test_l, '_language', '' );
   template_name CONSTANT text := 'test template';
   p CONSTANT text := 'trunklet.process(): ';
   c_original_role CONSTANT name := current_user;
 BEGIN
   PERFORM get_test_language_id();
-  PERFORM variant.add_type( 'trunklet_template', 'varchar' );
+  --PERFORM variant.add_type( 'trunklet_template', 'varchar' );
 
   RETURN NEXT throws_ok(
     format( test_l, bogus_language_name(), any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text[]) )
@@ -802,17 +820,20 @@ BEGIN
     , p || 'invalid language'
   );
 
+  /*
+  -- Everything casts to text when you ask it to, so trying to test this right now is pretty pointless with our current test template.
   RETURN NEXT throws_ok(
     format( test_l, lname, any_to_trunklet_template('%s'::varchar), any_to_trunklet_parameter('{a}'::text[]) )
     , '22000'
     , 'templates for language "Our internal test language" must by of type "text"'
     , p || 'invalid template' -- TEMPLATE
   );
+  */
 
   RETURN NEXT throws_ok(
-    format( test_l, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('{a}'::text) )
-    , '22000'
-    , 'parameters for language "Our internal test language" must by of type "text[]"'
+    format( test_l, lname, any_to_trunklet_template('%s'::text), any_to_trunklet_parameter('a'::text) )
+    , '22P02'
+    , 'malformed array literal: "a"'
     , p || 'invalid parameter' -- PARAMETERS
   );
 
@@ -827,8 +848,12 @@ BEGIN
     CREATE TEMP VIEW test AS
     SELECT *
           -- Once we switch roles later we can't run these functions, so do that in the view instead
+          /*
           , any_to_trunklet_template(template) AS template_v
           , any_to_trunklet_parameter(parameters) AS parameters_v
+          */
+          , template AS template_v
+          , parameters AS parameters_v
       FROM (
           SELECT *
             FROM (VALUES
@@ -864,7 +889,7 @@ BEGIN
            */
           trunklet.process_language( lname, template_v, parameters_v )
           , expected
-          , format( 'trunklet.process( ..., %L, %L )', template, parameters )
+          , format( 'trunklet.process_language( ..., %L, %L )', template, parameters )
         )
       FROM test
   ;
@@ -916,7 +941,8 @@ BEGIN
     v_detail text;
   BEGIN
     RETURN NEXT is(
-      trunklet.extract_parameters( lname, any_to_trunklet_parameter('{cow,goes,moo}'::text[]), '{2}' )::text[]
+      trunklet.extract_parameters( lname, --any_to_trunklet_parameter
+          ('{cow,goes,moo}'::text[]), '{2}' )::text[]
       , array['goes'::text]
     );
   EXCEPTION

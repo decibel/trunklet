@@ -1,15 +1,9 @@
 include pgxntool/base.mk
 
 #
-# OTHER DEPS
+# Test deps
 #
-.PHONY: deps
-deps: variant
 
-install: deps
+test_core_files = $(wildcard $(TESTDIR)/core/*.sql)
+testdeps: $(test_core_files)
 
-.PHONY: variant
-variant: $(DESTDIR)$(datadir)/extension/variant.control
-
-$(DESTDIR)$(datadir)/extension/variant.control:
-	pgxn install variant --unstable

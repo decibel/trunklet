@@ -44,29 +44,28 @@ ok 4 - _trunklet_test.test_extract_parameters
 ok 5 - _trunklet_test.test_language__get_id
     # Subtest: _trunklet_test.test_process()
     ok 1 - trunklet.process(): invalid language
-    ok 2 - trunklet.process(): invalid template
-    ok 3 - trunklet.process(): invalid parameter
-    ok 4 - Create test view
-    ok 5 - Create predefined templates
-    ok 6 - Create test role
-    ok 7 - Grant test role USAGE on test schema
-    ok 8 - Change to test role
-    ok 9 - Verify role change
-    ok 10 - trunklet.process( ..., '%s', '{a}' )
-    ok 11 - trunklet.process( ..., '%s %s', '{a,b}' )
-    ok 12 - trunklet.process( ..., '%s %s', '{a,NULL}' )
-    ok 13 - trunklet.process( ..., '%s', '{NULL}' )
-    ok 14 - trunklet.process( ..., 'moo', NULL )
-    ok 15 - trunklet.process( 'test template', '{a}' )
-    ok 16 - trunklet.process( 'test template', '1', '{a}' )
-    ok 17 - trunklet.process( 'test template', '2', '{a,b}' )
-    ok 18 - trunklet.process( 'test template', '3', '{a,NULL}' )
-    ok 19 - trunklet.process( 'test template', '4', '{NULL}' )
-    ok 20 - trunklet.process( 'test template', '5', NULL )
-    ok 21 - Change back to original role
-    ok 22 - Revoke test role USAGE on test schema
-    ok 23 - Drop test role
-    1..23
+    ok 2 - trunklet.process(): invalid parameter
+    ok 3 - Create test view
+    ok 4 - Create predefined templates
+    ok 5 - Create test role
+    ok 6 - Grant test role USAGE on test schema
+    ok 7 - Change to test role
+    ok 8 - Verify role change
+    ok 9 - trunklet.process_language( ..., '%s', '{a}' )
+    ok 10 - trunklet.process_language( ..., '%s %s', '{a,b}' )
+    ok 11 - trunklet.process_language( ..., '%s %s', '{a,NULL}' )
+    ok 12 - trunklet.process_language( ..., '%s', '{NULL}' )
+    ok 13 - trunklet.process_language( ..., 'moo', NULL )
+    ok 14 - trunklet.process( 'test template', '{a}' )
+    ok 15 - trunklet.process( 'test template', '1', '{a}' )
+    ok 16 - trunklet.process( 'test template', '2', '{a,b}' )
+    ok 17 - trunklet.process( 'test template', '3', '{a,NULL}' )
+    ok 18 - trunklet.process( 'test template', '4', '{NULL}' )
+    ok 19 - trunklet.process( 'test template', '5', NULL )
+    ok 20 - Change back to original role
+    ok 21 - Revoke test role USAGE on test schema
+    ok 22 - Drop test role
+    1..22
 ok 6 - _trunklet_test.test_process
     # Subtest: _trunklet_test.test_schemas()
     ok 1 - Role public should be granted USAGE on schema trunklet
@@ -76,18 +75,18 @@ ok 6 - _trunklet_test.test_process
     1..4
 ok 7 - _trunklet_test.test_schemas
     # Subtest: _trunklet_test.test_secdef_privs()
-    ok 1 - Verify acl for trunklet.template__remove(integer)
-    ok 2 - Verify acl for trunklet.template__add(character varying,text,integer,variant.variant)
+    ok 1 - Verify acl for trunklet.template__add(character varying,text,integer,text)
+    ok 2 - Verify acl for trunklet.template__remove(integer)
     ok 3 - Verify acl for trunklet.template__remove(text,integer)
-    ok 4 - Verify acl for trunklet.process_language(character varying,variant.variant,variant.variant)
-    ok 5 - Verify acl for trunklet.process(text,integer,variant.variant)
-    ok 6 - Verify acl for trunklet.extract_parameters(character varying,variant.variant,text[])
-    ok 7 - Verify search_path for trunklet.template__remove(integer)
-    ok 8 - Verify search_path for trunklet.template__add(character varying,text,integer,variant.variant)
+    ok 4 - Verify acl for trunklet.process_language(character varying,text,anyelement)
+    ok 5 - Verify acl for trunklet.process(text,integer,anyelement)
+    ok 6 - Verify acl for trunklet.extract_parameters(character varying,anyelement,text[])
+    ok 7 - Verify search_path for trunklet.template__add(character varying,text,integer,text)
+    ok 8 - Verify search_path for trunklet.template__remove(integer)
     ok 9 - Verify search_path for trunklet.template__remove(text,integer)
-    ok 10 - Verify search_path for trunklet.process_language(character varying,variant.variant,variant.variant)
-    ok 11 - Verify search_path for trunklet.process(text,integer,variant.variant)
-    ok 12 - Verify search_path for trunklet.extract_parameters(character varying,variant.variant,text[])
+    ok 10 - Verify search_path for trunklet.process_language(character varying,text,anyelement)
+    ok 11 - Verify search_path for trunklet.process(text,integer,anyelement)
+    ok 12 - Verify search_path for trunklet.extract_parameters(character varying,anyelement,text[])
     1..12
 ok 8 - _trunklet_test.test_secdef_privs
     # Subtest: _trunklet_test.test_template__add()
@@ -95,7 +94,7 @@ ok 8 - _trunklet_test.test_secdef_privs
 
     not ok 2 - template__add: throw error when given bad template type # TODO Need to implement template type enforcement
     # Failed (TODO) test 2: "template__add: throw error when given bad template type"
-    #       caught: no exception
+    #       caught: 3F000: schema "variant" does not exist
     #       wanted: 12345
     ok 3 - Verify template__add results
     1..3
@@ -136,10 +135,7 @@ ok 13 - _trunklet_test.test_template_language
     # Subtest: _trunklet_test.test_template_language__add()
     ok 1 - threw 22023: language_name must not be NULL
     ok 2 - Verify we can create test language
-    ok 3 - Verify type added to registered variant "trunklet_template"
-    ok 4 - Verify type added to registered variant "trunklet_parameter"
-    ok 5 - Verify type added to registered variant "trunklet_return"
-    ok 6 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
-    1..6
+    ok 3 - Role public should be granted no privileges on function trunklet.template_language__add(character varying(100), regtype, regtype, text, text, text, text)
+    1..3
 ok 14 - _trunklet_test.test_template_language__add
 1..14

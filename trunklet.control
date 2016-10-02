@@ -2,4 +2,3 @@
 comment = 'A templating system for Postgres. Elephants don''t use templates, they use trunklets!'
 default_version = '0.1.1'
 relocatable = false
-requires = variant
