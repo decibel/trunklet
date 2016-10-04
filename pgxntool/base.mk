@@ -64,7 +64,7 @@ DATA += $(wildcard *.control)
 
 # Don't have installcheck bomb on error
 .IGNORE: installcheck
-installcheck: $(TEST_RESULT_FILES) $(TEST_OUT_FILES)
+installcheck: $(TEST_RESULT_FILES) $(TEST_OUT_FILES) $(TEST_SQL_FILES) $(TEST_SOURCE_FILES)
 
 #
 # TEST SUPPORT
