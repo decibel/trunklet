@@ -16,7 +16,7 @@
     "name": "trunklet",
 
     "X_comment": "REQUIRED. Version of the distribution. http://pgxn.org/spec/#version",
-    "version": "0.1.1",
+    "version": "0.2.0",
 
     "X_comment": "REQUIRED. Short description of distribution.",
     "abstract": "A templating system for Postgres.",
@@ -28,7 +28,7 @@
     "maintainer": "Jim Nasby <Jim.Nasby@BlueTreble.com>",
 
     "X_comment": "Optional. Status of distribution. Allowed values: unstable, testing, stable",
-    "release_status": "unstable",
+    "release_status": "testing",
 
     "X_comment": "REQUIRED. License(s) distribution is released under. http://pgxn.org/spec/#license",
     "license": "postgresql",
@@ -41,7 +41,7 @@
             "file": "sql/trunklet.sql",
 
             "X_comment": "REQUIRED. Version the extension is at.",
-            "version": "0.1.1",
+            "version": "0.2.0",
 
             "X_comment": "Optional: \"abstract\": Description of the extension.",
             "abstract": "A templating system for Postgres. Elephants don't use templates, they use trunklets!",
@@ -72,6 +72,7 @@
     "X_comment": "Optional. 'prereqs': Prerequisits for the distribution. http://pgxn.org/spec/#prereqs",
     "X_comment": "Valid keys for 'prereqs' are configure, build, runtime, or test.",
     "X_comment": "Valid keys for 'requires' are requires, recommends, suggests, or conflicts.",
+    "X_comment": "Tests use jsonb_object, which was added in 9.5",
     "prereqs": {
 
         "build": {
