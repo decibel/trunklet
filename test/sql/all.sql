@@ -10,4 +10,5 @@ SELECT * FROM _trunklet_test.test_process();
 -- Needed for now due to bug in pgtap-core.sql
 SET client_min_messages = WARNING;
 
+SHOW lc_collate;
 SELECT * FROM runtests( '_trunklet_test'::name );
