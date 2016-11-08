@@ -496,26 +496,11 @@ DECLARE
 /*
  * !!!!! SECURITY DEFINER !!!!!
  */
-  --c_template_regtype CONSTANT regtype := variant.original_type(template);
 
   r_language _trunklet.language;
-  r_template _trunklet.template;
   sql text;
   v_return text;
 BEGIN
-  /*
-   * Special case handling to support process( language_name, template_name, paramaters )
-   *
-   * If "template" is text or varchar, then see if we have a stored template
-   * with that name. If we do, use it; otherwise treat "template" as an actual
-   * template.
-   */
-  --IF c_template_regtype IN ('text'::regtype, 'varchar') THEN
-  r_template := _trunklet.template__get( template::text, loose := true );
-  --END IF;
-  IF r_template IS NULL THEN
-    r_template.template := template;
-  END IF;
 
 
   -- Can't do this during DECLARE (0A000: default value for row or record variable is not supported)
@@ -533,26 +518,13 @@ BEGIN
     , r_language.template_type
     , r_language.parameter_type
   );
-  RAISE DEBUG E'execute %\nUSING %, %', sql, r_template.template, parameters;
-  EXECUTE sql INTO STRICT v_return USING r_template.template, parameters;
+  RAISE DEBUG E'execute %\nUSING %, %', sql, template, parameters;
+  EXECUTE sql INTO STRICT v_return USING template, parameters;
   RAISE DEBUG '% returned %', sql, v_return;
 
   RETURN v_return;
 END
 $body$;
-/*
-CREATE OR REPLACE FUNCTION trunklet.process_language(
-  language_name _trunklet.language.language_name%TYPE
-  , template text
-  , parameters anyarray
-) RETURNS text LANGUAGE sql AS $body$
-SELECT trunklet.process_language(
-  language_name
-  , template
-  , parameters::text
-)
-$body$;
-*/
 
 CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
@@ -564,25 +536,13 @@ SECURITY DEFINER SET search_path = pg_catalog
 -- !!!
 AS $body$
 SELECT trunklet.process_language(
+      -- language_id comes from template__get() below
       (_trunklet.language__get(language_id)).language_name
       , template
       , parameters
     )
   FROM _trunklet.template__get( template_name, template_version )
 $body$;
-/*
-CREATE OR REPLACE FUNCTION trunklet.process(
-  template_name _trunklet.template.template_name%TYPE
-  , template_version _trunklet.template.template_version%TYPE
-  , parameters anyarray
-) RETURNS text LANGUAGE SQL AS $body$
-SELECT trunklet.process(
-  template_name
-  , template_version
-  , parameters::text
-)
-$body$;
-*/
 
 CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
@@ -590,17 +550,6 @@ CREATE OR REPLACE FUNCTION trunklet.process(
 ) RETURNS text LANGUAGE SQL AS $body$
 SELECT trunklet.process( template_name, 1, parameters )
 $body$;
-/*
-CREATE OR REPLACE FUNCTION trunklet.process(
-  template_name _trunklet.template.template_name%TYPE
-  , parameters anyarray
-) RETURNS text LANGUAGE SQL AS $body$
-SELECT trunklet.process(
-  template_name
-  , parameters::text
-)
-$body$;
-*/
 
 
 
