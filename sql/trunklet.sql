@@ -501,8 +501,6 @@ DECLARE
   sql text;
   v_return text;
 BEGIN
-
-
   -- Can't do this during DECLARE (0A000: default value for row or record variable is not supported)
   r_language := _trunklet.language__get( language_name );
 
@@ -550,6 +548,59 @@ CREATE OR REPLACE FUNCTION trunklet.process(
 ) RETURNS text LANGUAGE SQL AS $body$
 SELECT trunklet.process( template_name, 1, parameters )
 $body$;
+
+
+
+/*
+ * trunklet.execute_into()
+ */
+CREATE OR REPLACE FUNCTION trunklet.execute_into__language(
+  language_name _trunklet.language.language_name%TYPE
+  , template text
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process_language(language_name, template, parameters);
+
+  r record;
+BEGIN
+  -- Define the structure of r
+  EXECUTE format('SELECT NULL::%s AS out', pg_typeof(parameters)) INTO STRICT r;
+
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT r.out;
+  RAISE DEBUG '% returned %', sql, r.out;
+
+  RETURN r.out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_into(
+  template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process(template_name, template_version, parameters);
+
+  r record;
+BEGIN
+  -- Define the structure of r
+  EXECUTE format('SELECT NULL::%s AS out', pg_typeof(parameters)) INTO STRICT r;
+
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT r.out;
+  RAISE DEBUG '% returned %', sql, r.out;
+
+  RETURN r.out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_into(
+  template_name _trunklet.template.template_name%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE SQL AS $body$
+SELECT trunklet.execute_into( template_name, 1, parameters )
+$body$;
+
 
 
 

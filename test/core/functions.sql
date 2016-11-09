@@ -158,10 +158,18 @@ BEGIN
       , parameter_type := 'text[]'
       , template_type := 'text'
       , process_function_options := 'LANGUAGE plpgsql'
-      , process_function_body := $process$
+      , process_function_body :=
+$process$
 DECLARE
-  v_args CONSTANT text := array_to_string( array( SELECT ', ' || quote_nullable(a) FROM unnest(parameters::text[]) a(a) ), '' );
-  sql CONSTANT text := format( 'SELECT format( %L%s )', template::text, v_args );
+  -- Convert parameters into a string of ', <parameter 1>, <parameter 2>, ...'
+  v_args CONSTANT text := array_to_string(
+    array(
+      SELECT ', ' || quote_nullable(a)
+        FROM unnest(parameters) a(a)
+      )
+    , ''
+  );
+  sql CONSTANT text := format( 'SELECT format( %L%s )', template, v_args );
   v_return text;
 BEGIN
   RAISE DEBUG 'EXECUTE INTO using sql %', sql;
@@ -170,12 +178,13 @@ BEGIN
 END
 $process$
       , extract_parameters_options := 'LANGUAGE sql'
-      , extract_parameters_body := $extract$
+      , extract_parameters_body :=
+$extract$
 SELECT array(
-    SELECT (parameters::text[])[i]
-      FROM generate_subscripts( parameters::text[], 1 ) i
+    SELECT parameters[i]
+      FROM generate_subscripts( parameters, 1 ) i
       WHERE i = ANY( extract_list::int[] )
-  )--::variant.variant
+  )
 $extract$
     );
   EXCEPTION
@@ -982,6 +991,98 @@ BEGIN
   EXCEPTION
     WHEN others THEN
       RAISE WARNING 'Caught exception %: %', SQLSTATE, SQLERRM;
+  END;
+
+  RETURN QUERY SELECT _trunklet_test.drop_test_role(c_original_role);
+END
+$body$;
+
+/*
+ * FUNCTION trunklet.execute_into
+ */
+CREATE FUNCTION test_execute_into
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  lname CONSTANT text := get_test_language_name();
+  test_l CONSTANT text := $$SELECT trunklet.execute_into__language( %L, %s, %s )$$;
+  test CONSTANT text := replace( test_l, '_language', '' );
+  template_name CONSTANT text := 'test template';
+  p CONSTANT text := 'trunklet.execute_into(): ';
+  c_original_role CONSTANT name := current_user;
+BEGIN
+  PERFORM get_test_language_id();
+  RETURN NEXT lives_ok($lives$
+    CREATE TEMP VIEW test AS
+    SELECT *
+          -- Once we switch roles later we can't run these functions, so do that in the view instead
+          /*
+          , any_to_trunklet_template(template) AS template_v
+          , any_to_trunklet_parameter(parameters) AS parameters_v
+          */
+          , template AS template_v
+          , parameters AS parameters_v
+      FROM (
+          SELECT *
+            FROM (VALUES
+                  ( 1::int, 'SELECT array[%L]'::text,   '{a}'::text[],  '{a}'::text[] )
+                --, ( 2, 'SELECT array[replace(%L, %L, %L)]', '{abc,b,}', '{ac}' )
+              ) a(version, template, parameters, expected)
+        ) a
+    ;
+    GRANT SELECT ON test TO PUBLIC;
+    $lives$
+    , 'Create test view'
+  );
+
+  RETURN NEXT lives_ok(
+    format(
+        $$SELECT trunklet.template__add( %L, %L, version, template ) FROM test$$
+        , lname
+        , template_name
+      )
+    , 'Create predefined templates'
+  );
+
+  RETURN QUERY SELECT create_test_role();
+
+  RETURN QUERY
+    SELECT is(
+          /*
+           * REMEMBER: the test language is actually just format, so first argument
+           * here is a format string itself, second is an array of text values.
+           */
+          trunklet.execute_into__language( lname, template_v, parameters_v )
+          , expected
+          , format( 'trunklet.execute_into__language( ..., %L, %L )', template, parameters )
+        )
+      FROM test
+  ;
+
+  -- This stuff will die if we screwed up template creation above
+  BEGIN
+    RETURN QUERY
+      SELECT is(
+            trunklet.execute_into( template_name, parameters_v )
+            , expected
+            , format( 'trunklet.execute_into( %L, %L )', template_name, parameters )
+          )
+        FROM test
+        WHERE version = 1
+    ;
+
+    RETURN QUERY
+      SELECT is(
+            trunklet.execute_into( template_name, version, parameters_v )
+            , expected
+            , format( 'trunklet.execute_into( %L, %L, %L )', template_name, version, parameters )
+          )
+        FROM test
+    ;
+    /*
+  EXCEPTION
+    WHEN others THEN
+      RAISE WARNING 'Caught exception %: %', SQLSTATE, SQLERRM;
+      */
   END;
 
   RETURN QUERY SELECT _trunklet_test.drop_test_role(c_original_role);
