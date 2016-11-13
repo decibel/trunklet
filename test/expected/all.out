@@ -36,10 +36,11 @@ ok 3 - _trunklet_test.test__table_template
     ok 7 - trunklet.execute_into__language( ..., 'SELECT array[%L]', '{a}' )
     ok 8 - trunklet.execute_into( 'test template', '{a}' )
     ok 9 - trunklet.execute_into( 'test template', '1', '{a}' )
-    ok 10 - Change back to original role
-    ok 11 - Revoke test role USAGE on test schema
-    ok 12 - Drop test role
-    1..12
+    ok 10 - trunklet.execute_into( <template_id>, '{a}' )
+    ok 11 - Change back to original role
+    ok 12 - Revoke test role USAGE on test schema
+    ok 13 - Drop test role
+    1..13
 ok 4 - _trunklet_test.test_execute_into
     # Subtest: _trunklet_test.test_extract_parameters()
     ok 1 - Create test role
@@ -79,10 +80,15 @@ ok 6 - _trunklet_test.test_language__get_id
     ok 18 - trunklet.process( 'test template', '3', '{a,NULL}' )
     ok 19 - trunklet.process( 'test template', '4', '{NULL}' )
     ok 20 - trunklet.process( 'test template', '5', NULL )
-    ok 21 - Change back to original role
-    ok 22 - Revoke test role USAGE on test schema
-    ok 23 - Drop test role
-    1..23
+    ok 21 - trunklet.process( <template_id>, '{a}' )
+    ok 22 - trunklet.process( <template_id>, '{a,b}' )
+    ok 23 - trunklet.process( <template_id>, '{a,NULL}' )
+    ok 24 - trunklet.process( <template_id>, '{NULL}' )
+    ok 25 - trunklet.process( <template_id>, NULL )
+    ok 26 - Change back to original role
+    ok 27 - Revoke test role USAGE on test schema
+    ok 28 - Drop test role
+    1..28
 ok 7 - _trunklet_test.test_process
     # Subtest: _trunklet_test.test_schemas()
     ok 1 - Role public should be granted USAGE on schema trunklet
@@ -92,19 +98,21 @@ ok 7 - _trunklet_test.test_process
     1..4
 ok 8 - _trunklet_test.test_schemas
     # Subtest: _trunklet_test.test_secdef_privs()
-    ok 1 - Verify acl for trunklet.template__add(character varying,text,integer,text)
-    ok 2 - Verify acl for trunklet.template__remove(integer)
+    ok 1 - Verify acl for trunklet.template__remove(integer)
+    ok 2 - Verify acl for trunklet.template__add(character varying,text,integer,text)
     ok 3 - Verify acl for trunklet.template__remove(text,integer)
     ok 4 - Verify acl for trunklet.process_language(character varying,text,anyelement)
-    ok 5 - Verify acl for trunklet.process(text,integer,anyelement)
-    ok 6 - Verify acl for trunklet.extract_parameters(character varying,anyelement,text[])
-    ok 7 - Verify search_path for trunklet.template__add(character varying,text,integer,text)
+    ok 5 - Verify acl for trunklet.process(integer,anyelement)
+    ok 6 - Verify acl for trunklet.process(text,integer,anyelement)
+    ok 7 - Verify acl for trunklet.extract_parameters(character varying,anyelement,text[])
     ok 8 - Verify search_path for trunklet.template__remove(integer)
-    ok 9 - Verify search_path for trunklet.template__remove(text,integer)
-    ok 10 - Verify search_path for trunklet.process_language(character varying,text,anyelement)
-    ok 11 - Verify search_path for trunklet.process(text,integer,anyelement)
-    ok 12 - Verify search_path for trunklet.extract_parameters(character varying,anyelement,text[])
-    1..12
+    ok 9 - Verify search_path for trunklet.template__add(character varying,text,integer,text)
+    ok 10 - Verify search_path for trunklet.template__remove(text,integer)
+    ok 11 - Verify search_path for trunklet.process_language(character varying,text,anyelement)
+    ok 12 - Verify search_path for trunklet.process(integer,anyelement)
+    ok 13 - Verify search_path for trunklet.process(text,integer,anyelement)
+    ok 14 - Verify search_path for trunklet.extract_parameters(character varying,anyelement,text[])
+    1..14
 ok 9 - _trunklet_test.test_secdef_privs
     # Subtest: _trunklet_test.test_template__add()
     ok 1 - Bogus language throws error
@@ -131,11 +139,15 @@ ok 10 - _trunklet_test.test_template__add
 ok 11 - _trunklet_test.test_template__dependency
     # Subtest: _trunklet_test.test_template__get()
     ok 1 - threw P0002: template name "bogus" at version 1 not found
-    ok 2 - Verify loose := true
-    ok 3 - Check _trunklet.template__get( ..., 'test template' )
-    ok 4 - Check _trunklet.template__get( 'test template', 1 )
-    ok 5 - Check _trunklet.template__get( 'test template', 2 )
-    1..5
+    ok 2 - threw P0002: template not found
+    ok 3 - Verify template name with loose := true
+    ok 4 - Verify template id with loose := true
+    ok 5 - Check _trunklet.template__get( ..., 'test template' )
+    ok 6 - Check _trunklet.template__get( 'test template', 1 )
+    ok 7 - Check _trunklet.template__get( 'test template', 2 )
+    ok 8 - Check _trunklet.template__get( <template_id> )
+    ok 9 - Check _trunklet.template__get( <template_id> )
+    1..9
 ok 12 - _trunklet_test.test_template__get
     # Subtest: _trunklet_test.test_template__remove()
     ok 1 - Test templates removed by name/version

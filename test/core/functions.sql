@@ -595,13 +595,23 @@ BEGIN
   RETURN NEXT throws_ok(
     format( $$SELECT _trunklet.template__get( 'bogus' )$$ )
     , 'P0002'
-    , format( $$template name "bogus" at version 1 not found$$, get_test_language_name() )
+    , $$template name "bogus" at version 1 not found$$
+  );
+  RETURN NEXT throws_ok(
+    format( $$SELECT _trunklet.template__get( -999 )$$ )
+    , 'P0002'
+    , $$template not found$$
   );
 
   RETURN NEXT is(
     ( SELECT row(g.*)::_trunklet.template FROM _trunklet.template__get( 'bogus', loose := true ) AS g )
     , NULL::_trunklet.template
-    , 'Verify loose := true'
+    , 'Verify template name with loose := true'
+  );
+  RETURN NEXT is(
+    ( SELECT row(g.*)::_trunklet.template FROM _trunklet.template__get( -999, loose := true ) AS g )
+    , NULL::_trunklet.template
+    , 'Verify template id with loose := true'
   );
 
   RETURN NEXT bag_eq(
@@ -614,20 +624,19 @@ BEGIN
       $$
     , $$Check _trunklet.template__get( ..., 'test template' )$$
   );
-  /*
-  RETURN NEXT bag_eq(
-    $$SELECT * FROM _trunklet.template__get( get_test_language_name(), 'test template', i ) FROM generate_series(1, 2) i$$
-    , $$SELECT * FROM verify_test_template$$
-    , $$Check _trunklet.template__get( ..., 'test template', version )$$
-  );
-  */
   RETURN QUERY SELECT is(
         _trunklet.template__get( template_name, template_version )
         , ROW(t.*)::_trunklet.template
         , format( $$Check _trunklet.template__get( 'test template', %s )$$, template_version )
       )
     FROM _trunklet.template t
-      LEFT JOIN _trunklet.language l USING( language_id )
+  ;
+  RETURN QUERY SELECT is(
+        _trunklet.template__get( template_id )
+        , ROW(t.*)::_trunklet.template
+        , $$Check _trunklet.template__get( <template_id> )$$
+      )
+    FROM _trunklet.template t
   ;
 
 END
@@ -946,7 +955,15 @@ BEGIN
 
   RETURN NEXT lives_ok(
     format(
-        $$SELECT trunklet.template__add( %L, %L, version, template ) FROM test$$
+        $lives_fmt$
+          CREATE TEMP TABLE ids AS
+            SELECT trunklet.template__add( %L, %L, version, template ) AS template_id
+                , parameters
+                , expected
+              FROM test
+          ;
+          GRANT SELECT ON ids TO PUBLIC;
+        $lives_fmt$
         , lname
         , template_name
       )
@@ -987,6 +1004,15 @@ BEGIN
             , format( 'trunklet.process( %L, %L, %L )', template_name, version, parameters )
           )
         FROM test
+    ;
+
+    RETURN QUERY
+      SELECT is(
+            trunklet.process( template_id, parameters )
+            , expected
+            , format( 'trunklet.process( <template_id>, %L )', parameters )
+          )
+        FROM ids
     ;
   EXCEPTION
     WHEN others THEN
@@ -1033,15 +1059,23 @@ BEGIN
     $lives$
     , 'Create test view'
   );
-
   RETURN NEXT lives_ok(
     format(
-        $$SELECT trunklet.template__add( %L, %L, version, template ) FROM test$$
+        $lives_fmt$
+          CREATE TEMP TABLE ids AS
+            SELECT trunklet.template__add( %L, %L, version, template ) AS template_id
+                , parameters
+                , expected
+              FROM test
+          ;
+          GRANT SELECT ON ids TO PUBLIC;
+        $lives_fmt$
         , lname
         , template_name
       )
     , 'Create predefined templates'
   );
+
 
   RETURN QUERY SELECT create_test_role();
 
@@ -1077,6 +1111,15 @@ BEGIN
             , format( 'trunklet.execute_into( %L, %L, %L )', template_name, version, parameters )
           )
         FROM test
+    ;
+
+    RETURN QUERY
+      SELECT is(
+            trunklet.execute_into( template_id, parameters )
+            , expected
+            , format( 'trunklet.execute_into( <template_id>, %L )', parameters )
+          )
+        FROM ids
     ;
     /*
   EXCEPTION

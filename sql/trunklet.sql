@@ -325,6 +325,35 @@ CREATE TABLE _trunklet.template(
 GRANT REFERENCES ON _trunklet.template TO trunklet__dependency;
 
 CREATE OR REPLACE FUNCTION _trunklet.template__get(
+  template_id _trunklet.template.template_id%TYPE
+  , loose boolean DEFAULT false
+) RETURNS _trunklet.template LANGUAGE plpgsql AS $body$
+DECLARE
+  r _trunklet.template;
+BEGIN
+  SELECT * INTO STRICT r
+    FROM _trunklet.template t
+    WHERE t.template_id = template__get.template_id
+  ;
+
+  RETURN r;
+EXCEPTION
+  WHEN no_data_found THEN
+    IF loose THEN
+      RETURN NULL;
+    ELSE
+      RAISE EXCEPTION 'template not found'
+        USING ERRCODE = 'no_data_found'
+          , DETAIL = format( 'template id %s', template_id )
+      ;
+    END IF;
+END
+$body$;
+REVOKE ALL ON FUNCTION _trunklet.template__get(
+  template_id _trunklet.template.template_id%TYPE
+  , loose boolean
+) FROM public;
+CREATE OR REPLACE FUNCTION _trunklet.template__get(
   template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE DEFAULT 1
   , loose boolean DEFAULT false
@@ -525,6 +554,22 @@ END
 $body$;
 
 CREATE OR REPLACE FUNCTION trunklet.process(
+  template_id _trunklet.template.template_id%TYPE
+  , parameters anyelement
+) RETURNS text LANGUAGE SQL
+-- !!!
+SECURITY DEFINER SET search_path = pg_catalog
+-- !!!
+AS $body$
+SELECT trunklet.process_language(
+      -- language_id comes from template__get() below
+      (_trunklet.language__get(language_id)).language_name
+      , template
+      , parameters
+    )
+  FROM _trunklet.template__get( template_id )
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
   , template_version _trunklet.template.template_version%TYPE
   , parameters anyelement
@@ -541,14 +586,12 @@ SELECT trunklet.process_language(
     )
   FROM _trunklet.template__get( template_name, template_version )
 $body$;
-
 CREATE OR REPLACE FUNCTION trunklet.process(
   template_name _trunklet.template.template_name%TYPE
   , parameters anyelement
 ) RETURNS text LANGUAGE SQL AS $body$
 SELECT trunklet.process( template_name, 1, parameters )
 $body$;
-
 
 
 /*
@@ -561,6 +604,25 @@ CREATE OR REPLACE FUNCTION trunklet.execute_into__language(
 ) RETURNS anyelement LANGUAGE plpgsql AS $body$
 DECLARE
   sql CONSTANT text := trunklet.process_language(language_name, template, parameters);
+
+  r record;
+BEGIN
+  -- Define the structure of r
+  EXECUTE format('SELECT NULL::%s AS out', pg_typeof(parameters)) INTO STRICT r;
+
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT r.out;
+  RAISE DEBUG '% returned %', sql, r.out;
+
+  RETURN r.out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_into(
+  template_id _trunklet.template.template_id%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process(template_id, parameters);
 
   r record;
 BEGIN
