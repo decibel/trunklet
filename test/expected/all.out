@@ -34,13 +34,16 @@ ok 3 - _trunklet_test.test__table_template
     ok 5 - Change to test role
     ok 6 - Verify role change
     ok 7 - trunklet.execute_into__language( ..., 'SELECT array[%L]', '{a}' )
-    ok 8 - trunklet.execute_into( 'test template', '{a}' )
-    ok 9 - trunklet.execute_into( 'test template', '1', '{a}' )
-    ok 10 - trunklet.execute_into( <template_id>, '{a}' )
-    ok 11 - Change back to original role
-    ok 12 - Revoke test role USAGE on test schema
-    ok 13 - Drop test role
-    1..13
+    ok 8 - trunklet.execute_into__language( ..., 'SELECT array[replace(%L, %L, %L)]', '{abc,b,""}' )
+    ok 9 - trunklet.execute_into( 'test template', '{a}' )
+    ok 10 - trunklet.execute_into( 'test template', '1', '{a}' )
+    ok 11 - trunklet.execute_into( 'test template', '2', '{abc,b,""}' )
+    ok 12 - trunklet.execute_into( <template_id>, '{a}' )
+    ok 13 - trunklet.execute_into( <template_id>, '{abc,b,""}' )
+    ok 14 - Change back to original role
+    ok 15 - Revoke test role USAGE on test schema
+    ok 16 - Drop test role
+    1..16
 ok 4 - _trunklet_test.test_execute_into
     # Subtest: _trunklet_test.test_extract_parameters()
     ok 1 - Create test role

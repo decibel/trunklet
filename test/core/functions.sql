@@ -1051,7 +1051,7 @@ BEGIN
           SELECT *
             FROM (VALUES
                   ( 1::int, 'SELECT array[%L]'::text,   '{a}'::text[],  '{a}'::text[] )
-                --, ( 2, 'SELECT array[replace(%L, %L, %L)]', '{abc,b,}', '{ac}' )
+                , ( 2, 'SELECT array[replace(%L, %L, %L)]', '{abc,b,""}', '{ac}' )
               ) a(version, template, parameters, expected)
         ) a
     ;
