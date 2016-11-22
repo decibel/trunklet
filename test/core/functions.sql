@@ -711,33 +711,33 @@ BEGIN
    * to ensure that we're protecting against SQL injection.
    */
   DECLARE
-    errcode text := '42P01';
-    errmsg text := 'relation "bogus_table" does not exist';
-    errcontext text := $$\APL/pgSQL function trunklet.template__dependency__add\(text,name\) line \d+ during statement block local variable initialization$$;
+    c_good_code text := '42P01';
+    c_good_msg text := 'relation "bogus_table" does not exist';
+    c_good_context text := $$\APL/pgSQL function trunklet.template__dependency__add\(text,name\) line \d+ during statement block local variable initialization$$;
 
     context text;
-    description text := 'threw with proper context ' || errcode || ': ' || errmsg;
+    description text := 'threw with proper context ' || c_good_code || ': ' || c_good_msg;
   BEGIN
     PERFORM trunklet.template__dependency__add( 'bogus_table', test_field );
     RETURN NEXT ok( FALSE, description ) || E'\n' || diag(
            '      caught: no exception' ||
-        E'\n      wanted: ' || COALESCE( errcode, 'an exception' )
+        E'\n      wanted: ' || COALESCE( c_good_code, 'an exception' )
     );
   EXCEPTION
     WHEN OTHERS THEN
       GET STACKED DIAGNOSTICS context = PG_EXCEPTION_CONTEXT;
-      IF (errcode IS NULL OR SQLSTATE = errcode)
-        AND ( errmsg IS NULL OR SQLERRM = errmsg)
-        AND context ~ errcontext
+      IF (c_good_code IS NULL OR SQLSTATE = c_good_code)
+        AND ( c_good_msg IS NULL OR SQLERRM = c_good_msg)
+        AND context ~ c_good_context
       THEN
         RETURN NEXT ok( TRUE, description );
       ELSE
         RETURN NEXT ok( FALSE, description ) || E'\n' || diag(
              '      caught: ' || SQLSTATE || ': ' || SQLERRM ||
           E'\n        context: ' || context ||
-          E'\n      wanted: ' || COALESCE( errcode, 'an exception' ) ||
-          COALESCE( ': ' || errmsg, '') ||
-          E'\n        context: ' || errcontext
+          E'\n      wanted: ' || COALESCE( c_good_code, 'an exception' ) ||
+          COALESCE( ': ' || c_good_msg, '') ||
+          E'\n        context: ' || c_good_context
         );
       END IF;
   END;
