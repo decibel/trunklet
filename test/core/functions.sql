@@ -567,6 +567,7 @@ BEGIN
       JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE nspname = 'trunklet'
       AND prosecdef
+    ORDER BY proname
   ;
 
   RETURN QUERY SELECT is(
@@ -578,6 +579,7 @@ BEGIN
       JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE nspname = 'trunklet'
       AND prosecdef
+    ORDER BY proname
   ;
 
 END
