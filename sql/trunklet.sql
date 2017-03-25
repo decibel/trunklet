@@ -666,6 +666,70 @@ $body$;
 
 
 
+
+/*
+ * trunklet.execute_text()
+ */
+CREATE OR REPLACE FUNCTION trunklet.execute_text__language(
+  language_name _trunklet.language.language_name%TYPE
+  , template text
+  , parameters anyelement
+) RETURNS text LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process_language(language_name, template, parameters);
+
+  out text;
+BEGIN
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT out;
+  RAISE DEBUG '% returned %', sql, out;
+
+  RETURN out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_text(
+  template_id _trunklet.template.template_id%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process(template_id, parameters);
+
+  out text;
+BEGIN
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT out;
+  RAISE DEBUG '% returned %', sql, out;
+
+  RETURN out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_text(
+  template_name _trunklet.template.template_name%TYPE
+  , template_version _trunklet.template.template_version%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE plpgsql AS $body$
+DECLARE
+  sql CONSTANT text := trunklet.process(template_name, template_version, parameters);
+
+  out text;
+BEGIN
+  RAISE DEBUG E'execute %', sql;
+  EXECUTE sql INTO STRICT out;
+  RAISE DEBUG '% returned %', sql, out;
+
+  RETURN out;
+END
+$body$;
+CREATE OR REPLACE FUNCTION trunklet.execute_text(
+  template_name _trunklet.template.template_name%TYPE
+  , parameters anyelement
+) RETURNS anyelement LANGUAGE SQL AS $body$
+SELECT trunklet.execute_text( template_name, 1, parameters )
+$body$;
+
+
+
+
 /*
  * trunklet.extract_parameters()
  */
