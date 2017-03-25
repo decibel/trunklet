@@ -6,3 +6,23 @@
 BEGIN;
 \i sql/trunklet.sql
 ROLLBACK;
+
+BEGIN;
+\i test/helpers/tap_setup.sql
+
+SELECT plan(3);
+
+SELECT lives_ok(
+    'CREATE EXTENSION trunklet;'
+    , 'CREATE EXTENSION trunklet;'
+);
+
+SELECT isnt(
+    current_setting('search_path')
+    , 'pg_catalog'
+    , 'Verify search_path is back to something sane after extension creation.'
+);
+SELECT hasnt_schema('__trunklet');
+
+SELECT finish();
+ROLLBACK;
