@@ -706,7 +706,7 @@ BEGIN
       JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE nspname = 'trunklet'
       AND prosecdef
-    ORDER BY proname
+    ORDER BY p.oid::regprocedure
   ;
 
   RETURN QUERY SELECT is(
@@ -718,7 +718,7 @@ BEGIN
       JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE nspname = 'trunklet'
       AND prosecdef
-    ORDER BY proname
+    ORDER BY p.oid::regprocedure
   ;
 
 END
