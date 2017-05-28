@@ -48,6 +48,17 @@ BEGIN
 END
 $body$;
 
+CREATE FUNCTION pg_temp.exec_as(name,text) RETURNS void LANGUAGE plpgsql AS $body$
+DECLARE
+  v_current_role name;
+BEGIN
+  v_current_role := current_role;
+  EXECUTE 'SET ROLE ' || $1;
+  EXECUTE $2;
+  EXECUTE 'SET ROLE ' || v_current_role;
+END
+$body$;
+
 /*
  * _trunklet.name_sanity()
  */
@@ -384,6 +395,134 @@ END
 $body$;
 
 /*
+ * language__remove()
+ */
+CREATE FUNCTION _template_language__remove(
+  remove_arg anyelement
+  , remove_template text
+) RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_remove_template CONSTANT text := remove_template;
+  c_language_name CONSTANT text := get_test_language_name();
+
+  v_language_id int;
+BEGIN
+  RAISE DEBUG '%: %', pg_typeof(remove_arg), remove_arg;
+  IF pg_typeof(remove_arg) = 'text'::regtype THEN
+    RETURN NEXT functions_are(
+      '_trunklet_functions'
+      , '{}'::name[]
+      , 'Ensure there are no language functions to start with'
+    );
+  END IF;
+
+  v_language_id := get_test_language_id();
+  RETURN NEXT isnt(
+    v_language_id, NULL
+    , 'Verify v_language_id is good'
+  );
+
+  -- Do this in this test so that we know function names are handled correctly post-drop
+  RETURN NEXT functions_are(
+    '_trunklet_functions',
+    array[
+      _trunklet.function_name( v_language_id, 'process' )
+      , _trunklet.function_name( v_language_id, 'extract_parameters' )
+    ]
+    , 'verify language functions exist'
+  );
+
+  RETURN NEXT lives_ok(
+    format(c_remove_template, remove_arg)
+    , format(c_remove_template, remove_arg) || ' lives'
+  );
+  RETURN NEXT functions_are(
+    '_trunklet_functions'
+    , '{}'::name[]
+  );
+END
+$body$;
+
+CREATE FUNCTION test_template_language__remove
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  c_remove_template CONSTANT text := $$SELECT trunklet.template_language__remove(%s)$$;
+  c_language_name CONSTANT text := get_test_language_name();
+
+  v_language_id int;
+BEGIN
+  -- Check bogus language name or ID
+  RETURN NEXT throws_ok(
+    format(c_remove_template, quote_literal('XXX' || c_language_name))
+    , 'P0002'
+    , format('language "%s" not found', 'XXX' || c_language_name)
+    , 'non-existent language NAME fails'
+  );
+  RETURN NEXT throws_ok(
+    format(c_remove_template, -999)
+    , 'P0002'
+    , 'language id -999 not found'
+    , 'non-existent language ID fails'
+  );
+
+  -- First do a test using the language name
+  RETURN QUERY SELECT _template_language__remove(quote_literal(c_language_name), c_remove_template);
+
+  -- Then using language ID
+  v_language_id := get_test_language_id();
+  RETURN QUERY SELECT _template_language__remove(v_language_id, c_remove_template);
+
+  /*
+   * Verify that we can't drop a language that has stored templates. We could
+   * just check the FK exists, but this also gives us a chance to test cascade
+   * = TRUE.
+   */
+  -- Create a table that will have a FK to _trunklet.template
+  -- SEE ALSO test_template__dependency()!
+  PERFORM pg_temp.dependency__create_table();
+  PERFORM pg_temp.dependency__alter_table();
+  PERFORM pg_temp.dependency__grant();
+
+  -- Add the actual FK
+  RETURN NEXT lives_ok(
+    $test$SELECT pg_temp.exec_as( '_trunklet_test_role'
+      , $sql$SELECT trunklet.template__dependency__add( '_trunklet_test.test_dependency', 'test_template_id' )$sql$
+    )$test$
+    , 'Add dependency from test table to template table'
+  );
+
+  -- Re-create test language and templates; insert template IDs into test table
+  INSERT INTO _trunklet_test.test_dependency SELECT * FROM unnest( get_test_templates() );
+
+  -- This should still fail, because the templates exist
+  -- TODO: verify correct HINT is returned
+  RETURN NEXT throws_ok(
+    format(c_remove_template, quote_literal(c_language_name))
+    , '23503'
+    , 'cannot drop language "Our internal text test language" because stored templates depend on it'
+    , 'Removing a language that has templates should fail'
+  );
+
+  -- Now try using cascade = TRUE. This should fail just like the previous call, but *with a different error message*.
+  -- TODO: verify correct DETAIL is returned
+  RETURN NEXT throws_ok(
+    format(c_remove_template, quote_literal(c_language_name) || ', cascade => TRUE')
+    , '23503'
+    , 'drop of language "Our internal text test language" violates foreign key constraint "test_dependency_test_template_id_fkey" on table "test_dependency"'
+    , 'Removing a language with cascade should fail if other things reference the templates.'
+  );
+
+  -- Drop dependency table
+  PERFORM pg_temp.dependency__drop_table();
+
+  RETURN NEXT lives_ok(
+    format(c_remove_template, quote_literal(c_language_name) || ', TRUE')
+    , format(c_remove_template, quote_literal(c_language_name) || ', TRUE') || ' lives'
+  );
+END
+$body$;
+
+/*
  * TABLE _trunklet.template
  */
 CREATE FUNCTION test__table_template
@@ -683,30 +822,44 @@ $body$;
 /*
  * FUNCTION trunklet.template__dependency
  */
-CREATE FUNCTION pg_temp.exec_as(name,text) RETURNS void LANGUAGE plpgsql AS $body$
-DECLARE
-  v_current_role name;
-BEGIN
-  v_current_role := current_role;
-  EXECUTE 'SET ROLE ' || $1;
-  EXECUTE $2;
-  EXECUTE 'SET ROLE ' || v_current_role;
-END
-$body$;
-CREATE FUNCTION test_template__dependency
-() RETURNS SETOF text LANGUAGE plpgsql AS $body$
-DECLARE
-  test_table text;
-  test_field name;
-BEGIN
 
-  -- Can't use a temp table because you can't add a FK from a temp table to a non-temp table
-  test_table := '_trunklet_test.test_dependency';
-  test_field := 'test_template_id';
+-- Helper functions
+-- SEE ALSO test_template_language__remove()!
+CREATE FUNCTION pg_temp.dependency__create_table(
+) RETURNS void LANGUAGE sql AS $body$
   DROP TABLE IF EXISTS _trunklet_test.test_dependency;
   CREATE TABLE _trunklet_test.test_dependency(
     test_template_id int
   );
+$body$;
+CREATE FUNCTION pg_temp.dependency__drop_table(
+) RETURNS void LANGUAGE sql AS $body$
+    DROP TABLE _trunklet_test.test_dependency;
+    REVOKE USAGE ON SCHEMA _trunklet_test FROM _trunklet_test_role;
+    REVOKE USAGE ON SCHEMA _trunklet FROM _trunklet_test_role;
+    DROP ROLE IF EXISTS _trunklet_test_role;
+$body$;
+CREATE FUNCTION pg_temp.dependency__alter_table(
+) RETURNS void LANGUAGE sql AS $body$
+    DROP ROLE IF EXISTS _trunklet_test_role;
+    CREATE ROLE _trunklet_test_role;
+    GRANT USAGE ON SCHEMA _trunklet_test TO _trunklet_test_role;
+    GRANT USAGE ON SCHEMA _trunklet TO _trunklet_test_role;
+    ALTER TABLE _trunklet_test.test_dependency OWNER TO _trunklet_test_role;
+$body$;
+CREATE FUNCTION pg_temp.dependency__grant(
+) RETURNS void LANGUAGE sql AS $body$
+    GRANT trunklet__dependency TO _trunklet_test_role;
+$body$;
+
+CREATE FUNCTION test_template__dependency
+() RETURNS SETOF text LANGUAGE plpgsql AS $body$
+DECLARE
+  -- Can't use a temp table because you can't add a FK from a temp table to a non-temp table
+  c_test_table text := '_trunklet_test.test_dependency';
+  c_test_field name := 'test_template_id';
+BEGIN
+  PERFORM pg_temp.dependency__create_table();
 
   /*
    * This ugliness is to verify we get the proper context. We need to do that
@@ -720,7 +873,7 @@ BEGIN
     context text;
     description text := 'threw with proper context ' || c_good_code || ': ' || c_good_msg;
   BEGIN
-    PERFORM trunklet.template__dependency__add( 'bogus_table', test_field );
+    PERFORM trunklet.template__dependency__add( 'bogus_table', c_test_field );
     RETURN NEXT ok( FALSE, description ) || E'\n' || diag(
            '      caught: no exception' ||
         E'\n      wanted: ' || COALESCE( c_good_code, 'an exception' )
@@ -756,61 +909,54 @@ BEGIN
         $test$SELECT pg_temp.exec_as( '_trunklet_test_role', $sql$SELECT trunklet.template__dependency__%s( %L, %L )$sql$ )$test$
     ;
   BEGIN
-    DROP ROLE IF EXISTS _trunklet_test_role;
-    CREATE ROLE _trunklet_test_role;
-    GRANT USAGE ON SCHEMA _trunklet_test TO _trunklet_test_role;
-    GRANT USAGE ON SCHEMA _trunklet TO _trunklet_test_role;
-    ALTER TABLE _trunklet_test.test_dependency OWNER TO _trunklet_test_role;
+    PERFORM pg_temp.dependency__alter_table();
     RETURN NEXT throws_ok(
-      format( test_template, 'add', test_table, test_field )
+      format( test_template, 'add', c_test_table, c_test_field )
       , '42501'
       , NULL
       , 'dependency__add: insufficient privilege'
     );
 
-    GRANT trunklet__dependency TO _trunklet_test_role;
+    PERFORM pg_temp.dependency__grant();
     RETURN NEXT lives_ok(
-      format( test_template, 'add', test_table, test_field )
+      format( test_template, 'add', c_test_table, c_test_field )
       , 'dependency__add: success'
     );
 
     RETURN NEXT fk_ok(
-      '_trunklet_test', 'test_dependency', test_field
+      '_trunklet_test', 'test_dependency', c_test_field
       , '_trunklet', 'template', 'template_id'
     );
 
     RETURN NEXT lives_ok(
-      format( test_template, 'remove', test_table, test_field )
+      format( test_template, 'remove', c_test_table, c_test_field )
       , 'dependency__remove: success'
     );
 
-    RETURN NEXT col_isnt_fk( '_trunklet_test', 'test_dependency', test_field, $$FK does not exist$$ );
+    RETURN NEXT col_isnt_fk( '_trunklet_test', 'test_dependency', c_test_field, $$FK does not exist$$ );
 
     RETURN NEXT throws_ok(
-      format( test_template, 'remove', test_table, test_field )
+      format( test_template, 'remove', c_test_table, c_test_field )
       , '42704'
-      , 'no template dependency on ' || test_table || '.' || test_field
+      , 'no template dependency on ' || c_test_table || '.' || c_test_field
       , 'dependency__remove: constraint does not exist'
     );
 
     RETURN NEXT throws_ok(
-      format( test_template, 'remove', test_table || 'XXX', test_field )
+      format( test_template, 'remove', c_test_table || 'XXX', c_test_field )
       , '42P01'
       , NULL
       , 'dependency__remove: undefined table'
     );
 
     RETURN NEXT throws_ok(
-      format( test_template, 'remove', test_table, test_field || 'XXX' )
+      format( test_template, 'remove', c_test_table, c_test_field || 'XXX' )
       , '42703'
-      , 'column "' || test_field || 'XXX" does not exist'
+      , 'column "' || c_test_field || 'XXX" does not exist'
       , 'dependency__remove: column does not exist'
     );
 
-    DROP TABLE _trunklet_test.test_dependency;
-    REVOKE USAGE ON SCHEMA _trunklet_test FROM _trunklet_test_role;
-    REVOKE USAGE ON SCHEMA _trunklet FROM _trunklet_test_role;
-    DROP ROLE IF EXISTS _trunklet_test_role;
+    PERFORM pg_temp.dependency__drop_table();
   END;
 END
 $body$;
