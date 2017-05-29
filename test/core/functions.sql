@@ -700,27 +700,37 @@ BEGIN
   RETURN QUERY SELECT is(
         proacl
         , NULL
-        , 'Verify acl for ' || p.oid::regprocedure
+        , 'Verify acl for ' || full_name
       )
-    FROM pg_proc p
-      JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE nspname = 'trunklet'
-      AND prosecdef
     -- This silliness is necessary to ensure stable ordering of the test
-    ORDER BY (p.oid::regprocedure)::text
+    FROM (
+      SELECT *, p.oid::regprocedure AS full_name
+        FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE nspname = 'trunklet'
+          AND prosecdef
+        -- Cast to text is necessary to avoid ordering by the actual OID in
+        -- 9.5. COLLATE is necessary to ensure a consistent order.
+        ORDER BY p.oid::regprocedure::text COLLATE "C"
+      ) a
   ;
 
   RETURN QUERY SELECT is(
         proconfig
         , '{search_path=pg_catalog}'
-        , 'Verify search_path for ' || p.oid::regprocedure
+        , 'Verify search_path for ' || full_name
       )
-    FROM pg_proc p
-      JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE nspname = 'trunklet'
-      AND prosecdef
     -- This silliness is necessary to ensure stable ordering of the test
-    ORDER BY (p.oid::regprocedure)::text
+    FROM (
+      SELECT *, p.oid::regprocedure AS full_name
+        FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE nspname = 'trunklet'
+          AND prosecdef
+        -- Cast to text is necessary to avoid ordering by the actual OID in
+        -- 9.5. COLLATE is necessary to ensure a consistent order.
+        ORDER BY p.oid::regprocedure::text COLLATE "C"
+      ) a
   ;
 
 END
