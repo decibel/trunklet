@@ -1,4 +1,4 @@
 # trunklet extension
 comment = 'A templating system for Postgres. Elephants don''t use templates, they use trunklets!'
-default_version = '0.3.0'
+default_version = '0.3.2'
 relocatable = false
