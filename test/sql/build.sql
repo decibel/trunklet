@@ -10,7 +10,7 @@ ROLLBACK;
 BEGIN;
 \i test/helpers/tap_setup.sql
 
-SELECT plan(3);
+SELECT plan(4);
 
 SELECT lives_ok(
     'CREATE EXTENSION trunklet;'
@@ -23,6 +23,11 @@ SELECT isnt(
     , 'Verify search_path is back to something sane after extension creation.'
 );
 SELECT hasnt_schema('__trunklet');
+
+SELECT lives_ok(
+    'DROP EXTENSION trunklet;'
+    , 'DROP EXTENSION trunklet;'
+);
 
 SELECT finish();
 ROLLBACK;
