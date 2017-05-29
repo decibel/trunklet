@@ -6,4 +6,9 @@ BEGIN;
 --\i sql/trunklet.sql
 CREATE EXTENSION trunklet;
 
+/*
+CREATE EXTENSION trunklet VERSION '0.2.1';
+ALTER EXTENSION trunklet UPDATE;
+ */
+
 \i test/core/functions.sql
