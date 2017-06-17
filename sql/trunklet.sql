@@ -13,10 +13,10 @@ CREATE SCHEMA __trunklet;
 CREATE TABLE __trunklet.old_settings AS
   SELECT name, setting
     FROM pg_catalog.pg_settings
-    WHERE name IN ('client_min_messages', 'search_path')
+    WHERE name IN ('client_min_messages')-- This doesn't actually work as expected :( , 'search_path')
 ;
 SET client_min_messages = warning;
-SET search_path = pg_catalog;
+-- PG apparently truncates the path to a single element, so our reset doesn't work :( SET LOCAL search_path = pg_catalog;
 
 DO $do$
 BEGIN
@@ -940,7 +940,6 @@ BEGIN
 END
 $body$;
 */
-
 
 
 SELECT _trunklet.exec(

@@ -2,8 +2,7 @@
  exec 
 ------
  
- 
-(2 rows)
+(1 row)
 
 1..4
 ok 1 - CREATE EXTENSION trunklet;
