@@ -1,0 +1,5 @@
+\set ECHO none
+1..1
+tap, public
+ok 1 - verify search_path has not changed
+# TRANSACTION INTENTIONALLY LEFT OPEN!
