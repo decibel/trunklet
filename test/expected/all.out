@@ -176,16 +176,18 @@ ok 15 - _trunklet_test.test_template_language__add
     ok 3 - Ensure there are no language functions to start with
     ok 4 - Verify v_language_id is good
     ok 5 - verify language functions exist
-    ok 6 - SELECT trunklet.template_language__remove('Our internal text test language') lives
-    ok 7 - Schema _trunklet_functions should have the correct functions
-    ok 8 - Verify v_language_id is good
-    ok 9 - verify language functions exist
-    ok 10 - SELECT trunklet.template_language__remove(16) lives
-    ok 11 - Schema _trunklet_functions should have the correct functions
-    ok 12 - Add dependency from test table to template table
-    ok 13 - Removing a language that has templates should fail
-    ok 14 - Removing a language with cascade should fail if other things reference the templates.
-    ok 15 - SELECT trunklet.template_language__remove('Our internal text test language', TRUE) lives
-    1..15
+    ok 6 - DROP FUNCTION _trunklet_functions.language_id_0000000015__extract_parameters(text[],text[]) lives
+    ok 7 - SELECT trunklet.template_language__remove('Our internal text test language', ignore_missing_functions => TRUE) lives
+    ok 8 - SELECT trunklet.template_language__remove('Our internal text test language') lives
+    ok 9 - Schema _trunklet_functions should have the correct functions
+    ok 10 - Verify v_language_id is good
+    ok 11 - verify language functions exist
+    ok 12 - DROP FUNCTION _trunklet_functions.language_id_0000000017__extract_parameters(text[],text[]) lives
+    ok 13 - SELECT trunklet.template_language__remove(17, ignore_missing_functions => TRUE) lives
+    ok 14 - Add dependency from test table to template table
+    ok 15 - Removing a language that has templates should fail
+    ok 16 - Removing a language with cascade should fail if other things reference the templates.
+    ok 17 - SELECT trunklet.template_language__remove('Our internal text test language', TRUE) lives
+    1..17
 ok 16 - _trunklet_test.test_template_language__remove
 1..16

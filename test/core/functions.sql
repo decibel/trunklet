@@ -400,6 +400,7 @@ $body$;
 CREATE FUNCTION _template_language__remove(
   remove_arg anyelement
   , remove_template text
+  , run_second_test boolean DEFAULT TRUE
 ) RETURNS SETOF text LANGUAGE plpgsql AS $body$
 DECLARE
   c_remove_template CONSTANT text := remove_template;
@@ -432,14 +433,36 @@ BEGIN
     , 'verify language functions exist'
   );
 
+  -- Verify we ignore_missing_functions works FIRST, since it shouldn't affect any other behavior.
   RETURN NEXT lives_ok(
-    format(c_remove_template, remove_arg)
-    , format(c_remove_template, remove_arg) || ' lives'
+    format(
+      $$DROP FUNCTION %s$$
+      , ('_trunklet_functions.' || _trunklet.function_name( v_language_id, 'extract_parameters' ))::regproc::regprocedure
+    )
+    ,
+    format(
+      $$DROP FUNCTION %s$$
+      , ('_trunklet_functions.' || _trunklet.function_name( v_language_id, 'extract_parameters' ))::regproc::regprocedure
+    )
+    || ' lives'
   );
-  RETURN NEXT functions_are(
-    '_trunklet_functions'
-    , '{}'::name[]
+  RETURN NEXT lives_ok(
+    format(c_remove_template, remove_arg || ', ignore_missing_functions => TRUE')
+    , format(c_remove_template, remove_arg || ', ignore_missing_functions => TRUE') || ' lives'
   );
+
+  -- Re-create and re-drop, if allowed
+  IF run_second_test THEN
+    v_language_id := get_test_language_id();
+    RETURN NEXT lives_ok(
+      format(c_remove_template, remove_arg)
+      , format(c_remove_template, remove_arg) || ' lives'
+    );
+    RETURN NEXT functions_are(
+      '_trunklet_functions'
+      , '{}'::name[]
+    );
+  END IF;
 END
 $body$;
 
@@ -470,7 +493,7 @@ BEGIN
 
   -- Then using language ID
   v_language_id := get_test_language_id();
-  RETURN QUERY SELECT _template_language__remove(v_language_id, c_remove_template);
+  RETURN QUERY SELECT _template_language__remove(v_language_id, c_remove_template, false);
 
   /*
    * Verify that we can't drop a language that has stored templates. We could

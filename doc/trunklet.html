@@ -761,10 +761,6 @@ templates to be used later, as well as creating new templating languages.</span>
 <h3 id="_template_languages">1.1. Template Languages</h3>
 <div class="paragraph"><p>Trunklet is designed to allow for multiple different templating languages to be
 defined. This allows working in whatever template language is most comfortable to you.</p></div>
-<div class="paragraph"><p>To support maximum flexibility, Trunklet uses the
-<a href="http://pgxn.org/dist/variant">Variant data type</a> for defining both templates and
-sets of parameters to use with a template. It is up to the template language
-implementation to decide what actual data type to use.</p></div>
 <div class="sect3">
 <h4 id="_template_language__add">1.1.1. template_language__add</h4>
 <div class="listingblock">
@@ -801,6 +797,14 @@ AS &lt;process_function_body&gt;</code></pre>
 <div class="paragraph"><p><code>extract_parameters_options</code><br />
 <code>extract_parameters_body</code><br />
 Equivalent to the process_function parameters, except these support the <a href="#extract_parameters">[extract_parameters]</a> function. Note that this function must also accept a text array of parameter names to extract. See <a href="#extract_parameters">[extract_parameters]</a> for details.</p></div>
+<div class="admonitionblock">
+<table><tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">If you create a language as part of an extension, you need to manually ensure that <a href="#_template_language__remove">template_language__remove</a> is called. The best way to accomplish that is with <a href="http://pgxn.org/dist/extension_drop">extension_drop</a>. You can find an example of this in <a href="https://github.com/decibel/trunklet-format/blob/master/sql/trunklet-format.sql">trunklet-format</a>.</td>
+</tr></table>
+</div>
 <div class="listingblock">
 <div class="title">A simple example based on format()</div>
 <div class="content">
@@ -865,11 +869,19 @@ parameters used with subscripting (since in this example it&#8217;s a text array
 <h4 id="_template_language__remove">1.1.2. template_language__remove</h4>
 <div class="listingblock">
 <div class="content">
-<pre><code>template_language__remove( language_name varchar(100)[, cascade boolean] ) RETURNS void
-template_language__remove( language_id int[, cascade boolean] ) RETURNS void</code></pre>
+<pre><code>template_language__remove( language_name varchar(100)[, cascade boolean][, ignore_missing_functions boolean] ) RETURNS void
+template_language__remove( language_id int[, cascade boolean][, ignore_missing_functions boolean] ) RETURNS void</code></pre>
 </div></div>
 <div class="paragraph"><p>Remove an existing template language.</p></div>
 <div class="paragraph"><p>This will fail if there are any stored templates for that language, unless <code>cascade</code> is true. Even then, it can still fail if template dependencies have been added (see <a href="#_template__dependency__add">template__dependency__add</a>).</p></div>
+<div class="admonitionblock">
+<table><tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">Generally speaking, the <code>ignore missing_functions</code> option should NOT be used. It exists because if a language is registered as part of an extension then the functions will be dropped by Postgres. See <a href="#_template_language__add">template_language__add</a> for more information.</td>
+</tr></table>
+</div>
 </div>
 <div class="sect3">
 <h4 id="_template_language">1.1.3. template_language</h4>
@@ -1004,7 +1016,7 @@ template__remove( template_id int ) RETURNS void</code></pre>
 <div id="footer">
 <div id="footer-text">
 Version 0.0.1<br />
-Last updated 2017-05-28 15:48:39 CDT
+Last updated 2017-06-17 20:17:29 CDT
 </div>
 </div>
 </body>

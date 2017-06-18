@@ -115,6 +115,7 @@ CREATE OR REPLACE FUNCTION _trunklet.language__get(
 DECLARE
   v_return _trunklet.language;
 BEGIN
+  RAISE DEBUG 'language__get(%)', language_name;
   SELECT * INTO STRICT v_return
     FROM _trunklet.language l
     WHERE l.language_name = language__get.language_name
@@ -186,6 +187,7 @@ CREATE OR REPLACE FUNCTION _trunklet._language_function__drop(
   language_id _trunklet.language.language_id%TYPE
   , function_type text
   , function_arguments text
+  , ignore_missing boolean DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
   func_name CONSTANT text := _trunklet.function_name( language_id, function_type );
@@ -196,13 +198,20 @@ DECLARE
     , func_name
     , function_arguments
   );
-BEGIN
-  PERFORM _trunklet.exec(
-    format(
-      $temp$DROP FUNCTION %1$s;$temp$
-      , func_full_name
-    )
+  c_sql CONSTANT text := format(
+    $temp$DROP FUNCTION %1$s;$temp$
+    , func_full_name
   );
+BEGIN
+  IF ignore_missing THEN
+    BEGIN
+      PERFORM _trunklet.exec(c_sql);
+    EXCEPTION WHEN undefined_function THEN
+      NULL;
+    END;
+  ELSE
+    PERFORM _trunklet.exec(c_sql);
+  END IF;
 END
 $body$;
 CREATE OR REPLACE FUNCTION _trunklet._language_function__create(
@@ -361,6 +370,7 @@ REVOKE ALL ON FUNCTION trunklet.template_language__add(
 CREATE OR REPLACE FUNCTION trunklet.template_language__remove(
   language_id _trunklet.language.language_id%TYPE
   , cascade boolean DEFAULT NULL
+  , ignore_missing_functions boolean DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
   r record;
@@ -415,7 +425,8 @@ BEGIN
   PERFORM _trunklet._language_function__drop(
     language_id
     , 'process'
-    , format(
+    , ignore_missing => ignore_missing_functions
+    , function_arguments => format(
       $args$
     template %s
     , parameters %s
@@ -428,7 +439,8 @@ $args$
   PERFORM _trunklet._language_function__drop(
     language_id
     , 'extract_parameters'
-    , format(
+    , ignore_missing => ignore_missing_functions
+    , function_arguments => format(
       $args$
     parameters %s
     , extract_list text[]
@@ -441,19 +453,23 @@ $body$;
 REVOKE ALL ON FUNCTION trunklet.template_language__remove(
   language_id _trunklet.language.language_id%TYPE
   , cascade boolean
+  , boolean
 ) FROM public;
 CREATE OR REPLACE FUNCTION trunklet.template_language__remove(
   language_name _trunklet.language.language_name%TYPE
   , cascade boolean DEFAULT NULL
+  , ignore_missing_functions boolean DEFAULT NULL
 ) RETURNS void LANGUAGE sql AS $body$
 SELECT trunklet.template_language__remove(
   _trunklet.language__get_id(language_name) -- Will throw error if language doesn't exist
   , cascade
+  , ignore_missing_functions
 )
 $body$;
 REVOKE ALL ON FUNCTION trunklet.template_language__remove(
   language_name _trunklet.language.language_name%TYPE
   , cascade boolean
+  , boolean
 ) FROM public;
 
 
